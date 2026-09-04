@@ -1,0 +1,15 @@
+# Node / Vite
+node_modules/
+dist/
+dist-ssr/
+*.local
+.vite/
+
+# Temp / local
+_tmp_*
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/

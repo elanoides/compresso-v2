@@ -1,0 +1,32 @@
+{
+  "name": "Node 22",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
+  "customizations": {
+    "codespaces": {
+      "openFiles": [
+        "README.md",
+        "src/App.tsx"
+      ]
+    },
+    "vscode": {
+      "settings": {},
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "bradlc.vscode-tailwindcss"
+      ]
+    }
+  },
+  "updateContentCommand": "npm ci",
+  "postAttachCommand": {
+    "server": "npm run dev -- --host 0.0.0.0"
+  },
+  "portsAttributes": {
+    "5173": {
+      "label": "CRT Parametric Font Studio",
+      "onAutoForward": "openPreview"
+    }
+  },
+  "forwardPorts": [
+    5173
+  ]
+}
