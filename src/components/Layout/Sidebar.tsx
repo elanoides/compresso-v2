@@ -15,6 +15,7 @@ import {
   MODULE_OVAL,
   type FillOrder,
   type ModuleType,
+  type SerifType,
   type StyleParams,
 } from '../../types/fontTypes';
 
@@ -96,6 +97,7 @@ export function Sidebar({
         />
         <SpacingSection params={params} onChange={onChange} />
         <DeformSection params={params} onChange={onChange} />
+        <SerifSection params={params} onChange={onChange} />
         <KerningSection params={params} onChange={onChange} />
         <ColorSection params={params} onChange={onChange} />
       </div>
@@ -584,6 +586,64 @@ function DeformSection({
         step={1}
         onChange={(seed) => onChange({ seed })}
       />
+    </Accordion>
+  );
+}
+
+
+function SerifSection({
+  params,
+  onChange,
+}: {
+  params: StyleParams;
+  onChange: (patch: Partial<StyleParams>) => void;
+}) {
+  const serif = params.serif;
+  const patchSerif = (partial: Partial<typeof serif>) => {
+    onChange({ serif: { ...serif, ...partial } });
+  };
+
+  return (
+    <Accordion title="Засечки (Serif)">
+      <Checkbox
+        label="Включить засечки (Slab Serifs)"
+        checked={serif.enabled}
+        onChange={(enabled) => patchSerif({ enabled })}
+      />
+      <Slider
+        label="Длина засечки"
+        value={serif.length}
+        min={1}
+        max={2}
+        step={1}
+        suffix=" col"
+        onChange={(length) => patchSerif({ length })}
+      />
+      <RadioGroup<SerifType>
+        label="Форма"
+        value={serif.type}
+        columns={2}
+        options={[
+          { value: 'bilateral', label: 'Двусторонняя (Slab)' },
+          { value: 'unilateral', label: 'Односторонняя (Флаг)' },
+        ]}
+        onChange={(type) => patchSerif({ type })}
+      />
+      <Checkbox
+        label="Верхние засечки"
+        checked={serif.applyToCap}
+        onChange={(applyToCap) => patchSerif({ applyToCap })}
+        disabled={!serif.enabled}
+      />
+      <Checkbox
+        label="Нижние засечки"
+        checked={serif.applyToBase}
+        onChange={(applyToBase) => patchSerif({ applyToBase })}
+        disabled={!serif.enabled}
+      />
+      <p className="-mt-1 text-[10px] leading-snug text-studio-faint">
+        Засечки ставятся на терминалах стоек по Cap-Height (ряд 4) и Baseline (ряд 23).
+      </p>
     </Accordion>
   );
 }

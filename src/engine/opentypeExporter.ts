@@ -28,6 +28,7 @@ import {
   ligatureWidth,
   tokenCoords,
 } from './ligatures';
+import { applySlabSerifs } from './serifEngine';
 import {
   DEFAULT_STYLE_NAME,
   FONT_FAMILY,
@@ -101,7 +102,9 @@ interface BuiltGlyph {
 
 function buildLigatureOutline(trigger: string, ctx: RenderContext, scale: number): BuiltGlyph {
   const p = ctx.params;
-  const coords = tokenCoords(trigger, p.colScale, p.rowScale, ctx.customGlyphs, ctx.ligatures);
+  const baseCoords = tokenCoords(trigger, p.colScale, p.rowScale, ctx.customGlyphs, ctx.ligatures);
+  const baseCols = ligatureWidth(trigger, ctx.ligatures) * Math.max(1, p.colScale);
+  const { coords, width: advanceCols } = applySlabSerifs(baseCoords, baseCols, p.serif);
   const charMap =
     p.moduleType === MODULE_FONT ? fontCharMap(coords, ctx, trigger) : new Map<number, string[]>();
 
@@ -126,7 +129,6 @@ function buildLigatureOutline(trigger: string, ctx: RenderContext, scale: number
     xMax = Math.max(xMax, cx + halfWidth);
   }
 
-  const advanceCols = ligatureWidth(trigger, ctx.ligatures) * Math.max(1, p.colScale);
   const advanceWidth = Math.max(
     1,
     Math.round((advanceCols + p.letterSpacing) * p.stepX * scale),
@@ -149,7 +151,9 @@ function buildGlyphOutline(
   versionIndex = 0,
 ): BuiltGlyph {
   const p = ctx.params;
-  const coords = getGlyph(ch, p.colScale, p.rowScale, ctx.customGlyphs, versionIndex);
+  const baseCoords = getGlyph(ch, p.colScale, p.rowScale, ctx.customGlyphs, versionIndex);
+  const baseCols = glyphWidth(ch, ctx.customGlyphs, versionIndex) * Math.max(1, p.colScale);
+  const { coords, width: advanceCols } = applySlabSerifs(baseCoords, baseCols, p.serif);
   const charMap =
     p.moduleType === MODULE_FONT ? fontCharMap(coords, ctx, ch) : new Map<number, string[]>();
 
@@ -174,10 +178,16 @@ function buildGlyphOutline(
     xMax = Math.max(xMax, cx + halfWidth);
   }
 
+  const advanceWidth = Math.max(
+    1,
+    Math.round((advanceCols + p.letterSpacing) * p.stepX * scale),
+    Math.ceil(xMax),
+  );
+
   return {
     char: ch,
     path: segmentsToOpentypePath(segments),
-    advanceWidth: Math.max(advanceWidthFor(ch, p, scale, ctx.customGlyphs, versionIndex), Math.ceil(xMax), 1),
+    advanceWidth,
     yMin: Math.floor(yMin),
     yMax: Math.ceil(yMax),
   };

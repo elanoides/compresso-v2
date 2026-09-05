@@ -23,6 +23,31 @@ export type FillOrder = typeof FILL_ORDER_COLUMNS | typeof FILL_ORDER_ROWS;
 /** Kerning deltas in grid-column units, keyed by a two-character pair. */
 export type KerningPairs = Readonly<Record<string, number>>;
 
+/** Slab serif generation mode. */
+export type SerifType = 'bilateral' | 'unilateral';
+
+/** Parametric slab-serif controls for one style. */
+export interface SerifParams {
+  /** Master switch for serif generation. */
+  enabled: boolean;
+  /** Serif reach in grid columns: 1 or 2. */
+  length: number;
+  /** Bilateral (slab) or unilateral (flag) serifs. */
+  type: SerifType;
+  /** Place serifs on Cap-Height (row 4). */
+  applyToCap: boolean;
+  /** Place serifs on Baseline (row 23). */
+  applyToBase: boolean;
+}
+
+export const DEFAULT_SERIF_PARAMS: SerifParams = {
+  enabled: false,
+  length: 1,
+  type: 'bilateral',
+  applyToCap: true,
+  applyToBase: true,
+};
+
 /**
  * Every parameter that defines one style (начертание).
  * This object is what gets stored in a preset, serialized to JSON and
@@ -70,6 +95,9 @@ export interface StyleParams {
   gridColor: string;
   showGuides: boolean;
   showGrid: boolean;
+
+  // Serifs
+  serif: SerifParams;
 
   // Kerning
   kerningPairs: KerningPairs;

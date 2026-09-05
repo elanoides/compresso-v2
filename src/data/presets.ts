@@ -7,9 +7,10 @@ import type {
   LigatureLibrary,
   PresetFilePayload,
   PresetLibrary,
+  SerifParams,
   StyleParams,
 } from '../types/fontTypes';
-import { FILL_ORDER_COLUMNS, MODULE_OVAL } from '../types/fontTypes';
+import { DEFAULT_SERIF_PARAMS, FILL_ORDER_COLUMNS, MODULE_OVAL } from '../types/fontTypes';
 import { normalizeLigatureLibrary } from '../engine/ligatures';
 
 export const PRESET_FILE_FORMAT = 'crt-font-studio-presets-v3';
@@ -51,6 +52,8 @@ export const REGULAR_PARAMS: StyleParams = {
   gridColor: '#4A6A4A',
   showGuides: false,
   showGrid: false,
+
+  serif: { ...DEFAULT_SERIF_PARAMS },
 
   kerningPairs: {},
 };
@@ -130,7 +133,11 @@ const STRING_KEYS = [
 
 /** Merge untrusted partial data onto the reference style, dropping junk. */
 export function normalizeParams(raw: unknown): StyleParams {
-  const out: StyleParams = { ...REGULAR_PARAMS, kerningPairs: {} };
+  const out: StyleParams = {
+    ...REGULAR_PARAMS,
+    serif: { ...DEFAULT_SERIF_PARAMS },
+    kerningPairs: {},
+  };
   if (!raw || typeof raw !== 'object') {
     return out;
   }
@@ -158,6 +165,29 @@ export function normalizeParams(raw: unknown): StyleParams {
   }
   if (out.moduleFontFillOrder !== 'columns' && out.moduleFontFillOrder !== 'rows') {
     out.moduleFontFillOrder = FILL_ORDER_COLUMNS;
+  }
+
+
+  const serifRaw = source.serif;
+  if (serifRaw && typeof serifRaw === 'object') {
+    const serifSource = serifRaw as Record<string, unknown>;
+    const serif: SerifParams = { ...DEFAULT_SERIF_PARAMS };
+    if (typeof serifSource.enabled === 'boolean') {
+      serif.enabled = serifSource.enabled;
+    }
+    if (typeof serifSource.length === 'number' && Number.isFinite(serifSource.length)) {
+      serif.length = Math.min(2, Math.max(1, Math.round(serifSource.length)));
+    }
+    if (serifSource.type === 'bilateral' || serifSource.type === 'unilateral') {
+      serif.type = serifSource.type;
+    }
+    if (typeof serifSource.applyToCap === 'boolean') {
+      serif.applyToCap = serifSource.applyToCap;
+    }
+    if (typeof serifSource.applyToBase === 'boolean') {
+      serif.applyToBase = serifSource.applyToBase;
+    }
+    out.serif = serif;
   }
 
   const kerning = source.kerningPairs;
