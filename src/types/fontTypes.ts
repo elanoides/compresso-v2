@@ -23,29 +23,71 @@ export type FillOrder = typeof FILL_ORDER_COLUMNS | typeof FILL_ORDER_ROWS;
 /** Kerning deltas in grid-column units, keyed by a two-character pair. */
 export type KerningPairs = Readonly<Record<string, number>>;
 
-/** Slab serif generation mode. */
-export type SerifType = 'bilateral' | 'unilateral';
+/** Historical antiqua classification for contrast and stress. */
+export type AntiquaStyle = 'old-style' | 'transitional' | 'modern';
 
-/** Parametric slab-serif controls for one style. */
-export interface SerifParams {
-  /** Master switch for serif generation. */
+/** Ending form on free stroke terminals (f, r, a, c and stem feet). */
+export type AntiquaTerminalType = 'serif' | 'ball' | 'beak';
+
+/**
+ * Parametric antiqua (serif) controls for one style.
+ * Contrast and stress shape thick/thin strokes; serif metrics build feet and brackets.
+ */
+export interface AntiquaParams {
   enabled: boolean;
-  /** Serif reach in grid columns: 1 or 2. */
-  length: number;
-  /** Bilateral (slab) or unilateral (flag) serifs. */
-  type: SerifType;
-  /** Place serifs on Cap-Height (row 4). */
-  applyToCap: boolean;
-  /** Place serifs on Baseline (row 23). */
-  applyToBase: boolean;
+  /** Renaissance (tilted axis), Transitional, or Modern / Didone (vertical axis). */
+  style: AntiquaStyle;
+  /** Thick-to-thin stroke ratio (1.5–8.0). */
+  contrastRatio: number;
+  /** Stress / swelling axis in degrees (0° = Didone, ~30–40° = Old Style). */
+  stressAngle: number;
+  /** Serif length along X relative to stem width. */
+  serifLength: number;
+  /** Horizontal serif bar thickness relative to stem width. */
+  serifThickness: number;
+  /** Bracket / apophysis roundness (0 = slab / Didone). */
+  bracketRadius: number;
+  /** Terminal form on free stroke endings. */
+  terminalType: AntiquaTerminalType;
 }
 
-export const DEFAULT_SERIF_PARAMS: SerifParams = {
+export const DEFAULT_ANTIQUA_PARAMS: AntiquaParams = {
   enabled: false,
-  length: 1,
-  type: 'bilateral',
-  applyToCap: true,
-  applyToBase: true,
+  style: 'transitional',
+  contrastRatio: 3,
+  stressAngle: 12,
+  serifLength: 1.1,
+  serifThickness: 0.35,
+  bracketRadius: 0.35,
+  terminalType: 'serif',
+};
+
+/** Suggested numeric defaults when the user picks an antiqua style. */
+export const ANTIQUA_STYLE_PRESETS: Readonly<Record<AntiquaStyle, Partial<AntiquaParams>>> = {
+  'old-style': {
+    contrastRatio: 2.2,
+    stressAngle: 35,
+    serifLength: 1.15,
+    serifThickness: 0.4,
+    bracketRadius: 0.65,
+    terminalType: 'serif',
+  },
+  transitional: {
+    contrastRatio: 3.5,
+    stressAngle: 12,
+    serifLength: 1.05,
+    serifThickness: 0.32,
+    bracketRadius: 0.3,
+    terminalType: 'serif',
+  },
+  modern: {
+    contrastRatio: 6.5,
+    stressAngle: 0,
+    serifLength: 0.95,
+    serifThickness: 0.22,
+    bracketRadius: 0,
+    terminalType: 'beak',
+  },
 };
 
 /**
@@ -96,8 +138,8 @@ export interface StyleParams {
   showGuides: boolean;
   showGrid: boolean;
 
-  // Serifs
-  serif: SerifParams;
+  // Antiqua / serif engine
+  antiqua: AntiquaParams;
 
   // Kerning
   kerningPairs: KerningPairs;

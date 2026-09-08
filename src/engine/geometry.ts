@@ -39,7 +39,10 @@ import {
   tokenAdvance,
   tokenCoords,
 } from './ligatures';
-import { applySlabSerifs } from './serifEngine';
+import {
+  antiquaOutlineToSvgPath,
+  buildAntiquaOutline,
+} from './antiquaEngine';
 import { intPart, stableIndex, stableUnit } from './hash';
 import { deserializeStamp, stampUniformScale } from './moduleStamp';
 import {
@@ -426,15 +429,6 @@ export function canvasBox(
 
 /** Place a string on the grid, applying kerning between adjacent glyphs. */
 
-/** Base glyph modules with optional slab-serif overlay (render / export only). */
-export function glyphModulesWithSerifs(
-  coords: GlyphMatrix,
-  width: number,
-  serif: StyleParams['serif'],
-): { coords: GlyphMatrix; width: number } {
-  return applySlabSerifs(coords, width, serif);
-}
-
 export function layoutText(
   text: string,
   p: StyleParams,
@@ -455,16 +449,22 @@ export function layoutText(
       cursor += p.kerningPairs[pair] ?? 0;
     }
 
-    const baseCoords = tokenCoords(token, p.colScale, p.rowScale, custom, ligatures, stylisticSet);
+    const coords = tokenCoords(token, p.colScale, p.rowScale, custom, ligatures, stylisticSet);
     const baseAdvance = tokenAdvance(token, p.colScale, custom, ligatures, stylisticSet);
-    if (isBlank(token) || baseCoords.length === 0) {
+    if (isBlank(token) || coords.length === 0) {
       cursor += baseAdvance + p.letterSpacing;
       prev = token;
       continue;
     }
 
-    const seriffed = applySlabSerifs(baseCoords, baseAdvance, p.serif);
-    for (const [col, row] of seriffed.coords) {
+    const antiqua = p.antiqua?.enabled
+      ? buildAntiquaOutline(token, coords, baseAdvance, p)
+      : null;
+    const advance = antiqua
+      ? Math.max(baseAdvance, antiqua.advanceWidth / Math.max(p.stepX, 1e-6))
+      : baseAdvance;
+
+    for (const [col, row] of coords) {
       const absCol = cursor + col;
       if (absCol > maxCol) {
         maxCol = absCol;
@@ -477,8 +477,11 @@ export function layoutText(
       }
       modules.push({ col: absCol, row, char: token });
     }
+    if (antiqua) {
+      maxCol = Math.max(maxCol, cursor + advance - 1);
+    }
 
-    cursor += seriffed.width + p.letterSpacing;
+    cursor += advance + p.letterSpacing;
     prev = token;
   }
 
@@ -827,18 +830,54 @@ export function renderTextSvg(
   }
 
   parts.push('<g>');
-  for (const m of modules) {
-    const [cx, cy] = transformedCenter(
-      m.col,
-      m.row,
-      p,
-      box.originX,
-      box.originY,
-      minRow,
-      m.char,
-    );
-    const chars = charMaps.get(m.char)?.get(cellKey(m.col, m.row));
-    parts.push(moduleSvgAt(cx, cy, ctx, p.fillOpacity, chars));
+  if (p.antiqua?.enabled) {
+    let cursor = 0;
+    let prev: string | null = null;
+    for (const token of normalizeTextWithLigatures(text, ctx.customGlyphs, ctx.ligatures ?? {})) {
+      if (prev !== null && !isBlank(token) && !isBlank(prev)) {
+        const pair = lastCharOfToken(prev) + firstCharOfToken(token);
+        cursor += p.kerningPairs[pair] ?? 0;
+      }
+      const coords = tokenCoords(token, p.colScale, p.rowScale, ctx.customGlyphs, ctx.ligatures ?? {}, ctx.stylisticSet ?? 0);
+      const baseAdvance = tokenAdvance(token, p.colScale, ctx.customGlyphs, ctx.ligatures ?? {}, ctx.stylisticSet ?? 0);
+      if (!isBlank(token) && coords.length > 0) {
+        const outline = buildAntiquaOutline(token, coords, baseAdvance, p);
+        if (outline && outline.segments.length > 0) {
+          const d = antiquaOutlineToSvgPath(
+            outline,
+            box.originX + cursor * p.stepX,
+            box.originY,
+            minRow,
+            p.stepY,
+          );
+          parts.push(
+            `<path d="${d}" fill="${p.fill}" fill-opacity="${p.fillOpacity.toFixed(3)}" ` +
+              `stroke="${p.stroke}" stroke-width="${f2(p.strokeWidth)}"/>`,
+          );
+          cursor += Math.max(baseAdvance, outline.advanceWidth / Math.max(p.stepX, 1e-6));
+        } else {
+          cursor += baseAdvance;
+        }
+      } else {
+        cursor += baseAdvance;
+      }
+      cursor += p.letterSpacing;
+      prev = token;
+    }
+  } else {
+    for (const m of modules) {
+      const [cx, cy] = transformedCenter(
+        m.col,
+        m.row,
+        p,
+        box.originX,
+        box.originY,
+        minRow,
+        m.char,
+      );
+      const chars = charMaps.get(m.char)?.get(cellKey(m.col, m.row));
+      parts.push(moduleSvgAt(cx, cy, ctx, p.fillOpacity, chars));
+    }
   }
   parts.push('</g></svg>');
 
@@ -854,11 +893,15 @@ export function renderGlyphSvg(
   const p = ctx.params;
   const frame = glyphFrame(ch, ctx);
   const baseWidth = Math.max(1, Math.ceil(frame.cols - p.letterSpacing));
-  const seriffed = applySlabSerifs(frame.coords, baseWidth, p.serif);
-  const coords = seriffed.coords;
+  const antiqua = p.antiqua?.enabled
+    ? buildAntiquaOutline(ch, frame.coords, baseWidth, p)
+    : null;
+  const coords = frame.coords;
   const minRow = frame.minRow;
   const maxRow = frame.maxRow;
-  const cols = Math.max(frame.cols, seriffed.width + p.letterSpacing);
+  const cols = antiqua
+    ? Math.max(frame.cols, antiqua.advanceWidth / Math.max(p.stepX, 1e-6) + p.letterSpacing)
+    : frame.cols;
   const maxCol = Math.max(cols - 1, 0);
   const modules: PlacedModule[] = coords.map(([col, row]) => ({
     col,
@@ -889,20 +932,26 @@ export function renderGlyphSvg(
     gridLines(parts, p, box, cols, minRow, maxRow);
   }
   if (showGhosts) {
-    // Ghosts stay on the editable base matrix so serifs are not paint targets.
     gridGhosts(parts, ctx, box, cols, minRow, maxRow, frame.coords);
   }
   if (p.showGuides) {
     glyphMetricGuides(parts, p, box, cols, minRow, maxRow);
   }
 
-  const charMap =
-    p.moduleType === MODULE_FONT ? fontCharMap(coords, ctx, ch) : new Map<number, string[]>();
-
   parts.push('<g>');
-  for (const [col, row] of coords) {
-    const [cx, cy] = transformedCenter(col, row, p, box.originX, box.originY, minRow, ch);
-    parts.push(moduleSvgAt(cx, cy, ctx, p.fillOpacity, charMap.get(cellKey(col, row))));
+  if (antiqua && antiqua.segments.length > 0) {
+    const d = antiquaOutlineToSvgPath(antiqua, box.originX, box.originY, minRow, p.stepY);
+    parts.push(
+      `<path d="${d}" fill="${p.fill}" fill-opacity="${p.fillOpacity.toFixed(3)}" ` +
+        `stroke="${p.stroke}" stroke-width="${f2(p.strokeWidth)}"/>`,
+    );
+  } else {
+    const charMap =
+      p.moduleType === MODULE_FONT ? fontCharMap(coords, ctx, ch) : new Map<number, string[]>();
+    for (const [col, row] of coords) {
+      const [cx, cy] = transformedCenter(col, row, p, box.originX, box.originY, minRow, ch);
+      parts.push(moduleSvgAt(cx, cy, ctx, p.fillOpacity, charMap.get(cellKey(col, row))));
+    }
   }
   parts.push('</g></svg>');
 

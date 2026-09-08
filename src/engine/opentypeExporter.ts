@@ -28,7 +28,7 @@ import {
   ligatureWidth,
   tokenCoords,
 } from './ligatures';
-import { applySlabSerifs } from './serifEngine';
+import { buildAntiquaOutline } from './antiquaEngine';
 import {
   DEFAULT_STYLE_NAME,
   FONT_FAMILY,
@@ -75,6 +75,34 @@ function segmentsToOpentypePath(segments: readonly PathSegment[]): opentype.Path
   return path;
 }
 
+function scaleSegment(seg: PathSegment, scale: number): PathSegment {
+  switch (seg.type) {
+    case 'M':
+    case 'L':
+      return { type: seg.type, x: seg.x * scale, y: seg.y * scale };
+    case 'C':
+      return {
+        type: 'C',
+        x1: seg.x1 * scale,
+        y1: seg.y1 * scale,
+        x2: seg.x2 * scale,
+        y2: seg.y2 * scale,
+        x: seg.x * scale,
+        y: seg.y * scale,
+      };
+    case 'Q':
+      return {
+        type: 'Q',
+        x1: seg.x1 * scale,
+        y1: seg.y1 * scale,
+        x: seg.x * scale,
+        y: seg.y * scale,
+      };
+    case 'Z':
+      return { type: 'Z' };
+  }
+}
+
 /** Cap-height band to font-unit scale factor for the current spacing. */
 export function fontUnitScale(p: StyleParams): number {
   const capSpan = Math.max((BASELINE - BODY_TOP) * p.stepY, 1);
@@ -104,7 +132,22 @@ function buildLigatureOutline(trigger: string, ctx: RenderContext, scale: number
   const p = ctx.params;
   const baseCoords = tokenCoords(trigger, p.colScale, p.rowScale, ctx.customGlyphs, ctx.ligatures);
   const baseCols = ligatureWidth(trigger, ctx.ligatures) * Math.max(1, p.colScale);
-  const { coords, width: advanceCols } = applySlabSerifs(baseCoords, baseCols, p.serif);
+
+  if (p.antiqua?.enabled) {
+    const outline = buildAntiquaOutline(trigger, baseCoords, baseCols, p);
+    if (outline && outline.segments.length > 0) {
+      const scaled = outline.segments.map((seg) => scaleSegment(seg, scale));
+      return {
+        char: trigger,
+        path: segmentsToOpentypePath(scaled),
+        advanceWidth: Math.max(1, Math.round(outline.advanceWidth * scale)),
+        yMin: Math.floor(outline.yMin * scale),
+        yMax: Math.ceil(outline.yMax * scale),
+      };
+    }
+  }
+
+  const coords = baseCoords;
   const charMap =
     p.moduleType === MODULE_FONT ? fontCharMap(coords, ctx, trigger) : new Map<number, string[]>();
 
@@ -129,6 +172,7 @@ function buildLigatureOutline(trigger: string, ctx: RenderContext, scale: number
     xMax = Math.max(xMax, cx + halfWidth);
   }
 
+  const advanceCols = baseCols;
   const advanceWidth = Math.max(
     1,
     Math.round((advanceCols + p.letterSpacing) * p.stepX * scale),
@@ -144,6 +188,7 @@ function buildLigatureOutline(trigger: string, ctx: RenderContext, scale: number
   };
 }
 
+
 function buildGlyphOutline(
   ch: string,
   ctx: RenderContext,
@@ -153,7 +198,22 @@ function buildGlyphOutline(
   const p = ctx.params;
   const baseCoords = getGlyph(ch, p.colScale, p.rowScale, ctx.customGlyphs, versionIndex);
   const baseCols = glyphWidth(ch, ctx.customGlyphs, versionIndex) * Math.max(1, p.colScale);
-  const { coords, width: advanceCols } = applySlabSerifs(baseCoords, baseCols, p.serif);
+
+  if (p.antiqua?.enabled) {
+    const outline = buildAntiquaOutline(ch, baseCoords, baseCols, p);
+    if (outline && outline.segments.length > 0) {
+      const scaled = outline.segments.map((seg) => scaleSegment(seg, scale));
+      return {
+        char: ch,
+        path: segmentsToOpentypePath(scaled),
+        advanceWidth: Math.max(1, Math.round(outline.advanceWidth * scale)),
+        yMin: Math.floor(outline.yMin * scale),
+        yMax: Math.ceil(outline.yMax * scale),
+      };
+    }
+  }
+
+  const coords = baseCoords;
   const charMap =
     p.moduleType === MODULE_FONT ? fontCharMap(coords, ctx, ch) : new Map<number, string[]>();
 
@@ -179,9 +239,9 @@ function buildGlyphOutline(
   }
 
   const advanceWidth = Math.max(
-    1,
-    Math.round((advanceCols + p.letterSpacing) * p.stepX * scale),
+    advanceWidthFor(ch, p, scale, ctx.customGlyphs, versionIndex),
     Math.ceil(xMax),
+    1,
   );
 
   return {
@@ -192,6 +252,7 @@ function buildGlyphOutline(
     yMax: Math.ceil(yMax),
   };
 }
+
 
 function notdefPath(): opentype.Path {
   const path = new opentype.Path();
