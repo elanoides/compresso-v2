@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 
 // GitHub Pages serves the app from /<repo-name>/, dev server from /.
 // Keep this in sync with the GitHub repository name for v3.
-const REPO_BASE = '/compresso-parametric-studio-v3/';
+const REPO_BASE = '/compresso-v2/';
 
 export default defineConfig(({ command }) => ({
   base: command === 'build' ? REPO_BASE : '/',
