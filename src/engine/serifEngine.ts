@@ -8,7 +8,7 @@
  * lives only in the render and export pipelines.
  */
 
-import type { GlyphMatrix, GridCoord, SerifParams } from '../types/fontTypes';
+import type { GlyphMatrix, GridCoord, SerifParams, StyleParams } from '../types/fontTypes';
 import { SERIF_MAX_WIDTH } from '../types/fontTypes';
 import { BASELINE, BODY_TOP, ROWS_TOTAL, sortCoords } from './glyphs';
 
@@ -24,6 +24,61 @@ const MIN_STEM_RUN = 4;
 
 /** Widest ink run that still counts as a stem; above it the row is a bar (Т, Е). */
 const MAX_STEM_COLS = 2;
+
+/** Serifs push neighbours apart, so tracking never drops below one module. */
+const MIN_SERIF_TRACKING = 1;
+
+/**
+ * Round and oval glyphs carry no serifs at all: their apex and foot are arcs,
+ * and a lit neighbour cell there turns the bowl into a horned shape.
+ * Glyph names in `uniXXXX` form resolve to the same entries.
+ */
+export const SERIF_BLACKLIST: ReadonlySet<string> = new Set([
+  'O',
+  'Q',
+  'C',
+  'S',
+  'G',
+  'О', // uni041E
+  'С', // uni0421
+  'Э', // uni042D
+  'Ю', // uni042E
+]);
+
+/** `uniXXXX` glyph name to its character, or the input when it is not a name. */
+function charOfGlyphName(name: string): string {
+  const match = /^uni([0-9A-Fa-f]{4,6})$/.exec(name);
+  return match ? String.fromCodePoint(Number.parseInt(match[1]!, 16)) : name;
+}
+
+/**
+ * True when the token must stay serif-free. A ligature keeps its serifs as
+ * long as at least one of its characters is a straight-stemmed letter.
+ */
+export function isSerifBlacklisted(token: string): boolean {
+  const key = charOfGlyphName(token);
+  if (SERIF_BLACKLIST.has(key)) {
+    return true;
+  }
+  const chars = [...key];
+  return chars.length > 1 && chars.every((ch) => SERIF_BLACKLIST.has(ch));
+}
+
+/** Whether this style generates serifs at all. */
+export function serifsActive(serif: SerifParams | undefined): boolean {
+  return Math.round(serif?.width ?? 0) > 0 && Boolean(serif?.applyToCap || serif?.applyToBase);
+}
+
+/**
+ * Tracking used by layout and export. Serif cells reach into the sidebearings,
+ * so an active serif engine keeps at least one module of letter spacing and
+ * neighbouring letters cannot touch.
+ */
+export function effectiveLetterSpacing(p: StyleParams): number {
+  return serifsActive(p.serif)
+    ? Math.max(p.letterSpacing, MIN_SERIF_TRACKING)
+    : p.letterSpacing;
+}
 
 export interface SerifResult {
   coords: GlyphMatrix;
@@ -127,9 +182,16 @@ function barRunLength(grid: boolean[][], col: number, row: number, cols: number)
 }
 
 /**
- * A free vertical terminal: filled on the anchor row, open just outside the
- * letter, with a real stem continuing inward. Filters horizontal bars (the top
- * of «Т», «Е») and the bottoms of closed bowls, which are not terminals.
+ * A free vertical terminal, and nothing else:
+ *   – the anchor cell is ink;
+ *   – the cell just inward (above a foot, below an apex) is ink too, and the
+ *     straight run continues for at least `MIN_STEM_RUN` cells, so arcs and
+ *     short tails («О», «С», «З», «Э», the comma) never qualify;
+ *   – the cell just outward is empty or past the grid, so a stem that keeps
+ *     going (the tails of «Ц», «Щ», «Д») is not a terminal;
+ *   – the ink run across the anchor row is no wider than a stem, which rules
+ *     out horizontal bars: both side neighbours lit means a crossbar («Т»,
+ *     «Е», «Ш»), never a terminal.
  */
 function isVerticalTerminal(
   grid: boolean[][],
@@ -174,15 +236,17 @@ function serifDirections(
 }
 
 /**
- * Overlay modular serifs onto a glyph matrix.
+ * Overlay modular serifs onto the matrix of `token`.
  *
- * `colScale` is the matrix density multiplier: one design module is that many
- * grid cells wide, so a serif of width 1 always reaches exactly one module.
- * Cells that fall past the left or right edge widen the matrix (and shift the
- * letter right when needed) so the glyph keeps its own proportions instead of
- * being squeezed.
+ * Round glyphs from `SERIF_BLACKLIST` come back untouched. Serif cells land on
+ * the very row of the terminal, one module at a time, and `colScale` is the
+ * matrix density multiplier: one design module is that many grid cells wide,
+ * so a serif of width 1 always reaches exactly one module. Cells that fall
+ * past the left or right edge widen the matrix (and shift the letter right
+ * when needed) so the glyph keeps its proportions instead of being squeezed.
  */
 export function applySlabSerifs(
+  token: string,
   coords: GlyphMatrix,
   width: number,
   serif: SerifParams,
@@ -195,6 +259,9 @@ export function applySlabSerifs(
     return { coords, width: Math.max(width, 0), shift: 0 };
   }
   if (!serif.applyToCap && !serif.applyToBase) {
+    return { coords, width, shift: 0 };
+  }
+  if (isSerifBlacklisted(token)) {
     return { coords, width, shift: 0 };
   }
 

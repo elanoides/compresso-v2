@@ -28,7 +28,7 @@ import {
   ligatureWidth,
   tokenCoords,
 } from './ligatures';
-import { applySlabSerifs } from './serifEngine';
+import { applySlabSerifs, effectiveLetterSpacing } from './serifEngine';
 import {
   DEFAULT_STYLE_NAME,
   FONT_FAMILY,
@@ -89,7 +89,7 @@ function advanceWidthFor(
   versionIndex?: number,
 ): number {
   const cols = glyphWidth(ch, custom, versionIndex) * Math.max(1, p.colScale);
-  return Math.max(1, Math.round((cols + p.letterSpacing) * p.stepX * scale));
+  return Math.max(1, Math.round((cols + effectiveLetterSpacing(p)) * p.stepX * scale));
 }
 
 interface BuiltGlyph {
@@ -105,6 +105,7 @@ function buildLigatureOutline(trigger: string, ctx: RenderContext, scale: number
   const baseCoords = tokenCoords(trigger, p.colScale, p.rowScale, ctx.customGlyphs, ctx.ligatures);
   const baseCols = ligatureWidth(trigger, ctx.ligatures) * Math.max(1, p.colScale);
   const { coords, width: advanceCols } = applySlabSerifs(
+    trigger,
     baseCoords,
     baseCols,
     p.serif,
@@ -136,7 +137,7 @@ function buildLigatureOutline(trigger: string, ctx: RenderContext, scale: number
 
   const advanceWidth = Math.max(
     1,
-    Math.round((advanceCols + p.letterSpacing) * p.stepX * scale),
+    Math.round((advanceCols + effectiveLetterSpacing(p)) * p.stepX * scale),
     Math.ceil(xMax),
   );
 
@@ -159,6 +160,7 @@ function buildGlyphOutline(
   const baseCoords = getGlyph(ch, p.colScale, p.rowScale, ctx.customGlyphs, versionIndex);
   const baseCols = glyphWidth(ch, ctx.customGlyphs, versionIndex) * Math.max(1, p.colScale);
   const { coords, width: advanceCols } = applySlabSerifs(
+    ch,
     baseCoords,
     baseCols,
     p.serif,
@@ -190,7 +192,7 @@ function buildGlyphOutline(
 
   const advanceWidth = Math.max(
     1,
-    Math.round((advanceCols + p.letterSpacing) * p.stepX * scale),
+    Math.round((advanceCols + effectiveLetterSpacing(p)) * p.stepX * scale),
     Math.ceil(xMax),
   );
 

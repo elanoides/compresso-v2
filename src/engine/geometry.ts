@@ -39,7 +39,7 @@ import {
   tokenAdvance,
   tokenCoords,
 } from './ligatures';
-import { applySlabSerifs } from './serifEngine';
+import { applySlabSerifs, effectiveLetterSpacing } from './serifEngine';
 import { intPart, stableIndex, stableUnit } from './hash';
 import { deserializeStamp, stampUniformScale } from './moduleStamp';
 import {
@@ -433,6 +433,7 @@ export function layoutText(
   stylisticSet = 0,
 ): TextLayout {
   const modules: PlacedModule[] = [];
+  const tracking = effectiveLetterSpacing(p);
   let maxCol = 0;
   let minRow = ROWS_TOTAL - 1;
   let maxRow = 0;
@@ -448,12 +449,12 @@ export function layoutText(
     const baseCoords = tokenCoords(token, p.colScale, p.rowScale, custom, ligatures, stylisticSet);
     const baseAdvance = tokenAdvance(token, p.colScale, custom, ligatures, stylisticSet);
     if (isBlank(token) || baseCoords.length === 0) {
-      cursor += baseAdvance + p.letterSpacing;
+      cursor += baseAdvance + tracking;
       prev = token;
       continue;
     }
 
-    const seriffed = applySlabSerifs(baseCoords, baseAdvance, p.serif, p.colScale);
+    const seriffed = applySlabSerifs(token, baseCoords, baseAdvance, p.serif, p.colScale);
     for (const [col, row] of seriffed.coords) {
       const absCol = cursor + col;
       if (absCol > maxCol) {
@@ -468,7 +469,7 @@ export function layoutText(
       modules.push({ col: absCol, row, char: token });
     }
 
-    cursor += seriffed.width + p.letterSpacing;
+    cursor += seriffed.width + tracking;
     prev = token;
   }
 
@@ -525,7 +526,7 @@ export function canvasBoxFromModules(
     maxY = Math.max(maxY, cy + hh);
   }
 
-  const tracking = includeTracking ? Math.max(0, p.letterSpacing) * p.stepX : 0;
+  const tracking = includeTracking ? Math.max(0, effectiveLetterSpacing(p)) * p.stepX : 0;
   return {
     width: PADDING * 2 + (maxX - minX) + tracking + extraRight,
     height: PADDING * 2 + (maxY - minY),
@@ -715,14 +716,15 @@ export function glyphFrame(ch: string, ctx: RenderContext): GlyphFrame {
     : getGlyph(ch, p.colScale, p.rowScale, custom);
   const minRow = 0;
   const maxRow = ROWS_TOTAL - 1;
+  const tracking = effectiveLetterSpacing(p);
   const baseCols = isBlank(ch)
-    ? SPACE_WIDTH_COLS * Math.max(1, p.colScale) + p.letterSpacing
+    ? SPACE_WIDTH_COLS * Math.max(1, p.colScale) + tracking
     : isLigatureTrigger(ch, ligatures)
-      ? tokenAdvance(ch, p.colScale, custom, ligatures) + p.letterSpacing
-      : scaledWidth(ch, p.colScale, custom) + p.letterSpacing;
-  const baseWidth = Math.max(1, Math.ceil(baseCols - p.letterSpacing));
-  const seriffed = applySlabSerifs(matrix, baseWidth, p.serif, p.colScale);
-  const cols = Math.max(baseCols, seriffed.width + p.letterSpacing);
+      ? tokenAdvance(ch, p.colScale, custom, ligatures) + tracking
+      : scaledWidth(ch, p.colScale, custom) + tracking;
+  const baseWidth = Math.max(1, Math.ceil(baseCols - tracking));
+  const seriffed = applySlabSerifs(ch, matrix, baseWidth, p.serif, p.colScale);
+  const cols = Math.max(baseCols, seriffed.width + tracking);
   const maxCol = Math.max(cols - 1, 0);
   const modules: PlacedModule[] = seriffed.coords.map(([col, row]) => ({
     col,
