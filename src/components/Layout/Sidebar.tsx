@@ -15,11 +15,9 @@ import {
   MODULE_OVAL,
   type FillOrder,
   type ModuleType,
-  type AntiquaStyle,
-  type AntiquaTerminalType,
+  type SerifType,
   type StyleParams,
 } from '../../types/fontTypes';
-import { antiquaFromStyle } from '../../engine/antiquaEngine';
 
 const MODULE_ANGLE_PRESETS = [0, 45, -45, 90] as const;
 
@@ -99,7 +97,7 @@ export function Sidebar({
         />
         <SpacingSection params={params} onChange={onChange} />
         <DeformSection params={params} onChange={onChange} />
-        <AntiquaSection params={params} onChange={onChange} />
+        <SerifSection params={params} onChange={onChange} />
         <KerningSection params={params} onChange={onChange} />
         <ColorSection params={params} onChange={onChange} />
       </div>
@@ -593,90 +591,58 @@ function DeformSection({
 }
 
 
-function AntiquaSection({
+function SerifSection({
   params,
   onChange,
 }: {
   params: StyleParams;
   onChange: (patch: Partial<StyleParams>) => void;
 }) {
-  const antiqua = params.antiqua;
-  const patch = (partial: Partial<typeof antiqua>) => {
-    onChange({ antiqua: { ...antiqua, ...partial } });
+  const serif = params.serif;
+  const patchSerif = (partial: Partial<typeof serif>) => {
+    onChange({ serif: { ...serif, ...partial } });
   };
 
   return (
-    <Accordion title="Антиква и засечки">
+    <Accordion title="Засечки (Serif)">
       <Checkbox
-        label="Включить движок антиквы"
-        checked={antiqua.enabled}
-        onChange={(enabled) => patch({ enabled })}
-      />
-      <RadioGroup<AntiquaStyle>
-        label="Пресет"
-        value={antiqua.style}
-        options={[
-          { value: 'old-style', label: 'Ренессанс (Garamond)' },
-          { value: 'transitional', label: 'Переходная (Baskerville)' },
-          { value: 'modern', label: 'Дидона (Bodoni)' },
-        ]}
-        onChange={(style) => onChange({ antiqua: antiquaFromStyle(style, antiqua) })}
+        label="Включить засечки (Slab Serifs)"
+        checked={serif.enabled}
+        onChange={(enabled) => patchSerif({ enabled })}
       />
       <Slider
-        label="Контраст штриха"
-        value={antiqua.contrastRatio}
-        min={1.5}
-        max={8}
-        step={0.1}
-        onChange={(contrastRatio) => patch({ contrastRatio })}
-      />
-      <Slider
-        label="Угол наклона наплыва"
-        value={antiqua.stressAngle}
-        min={-45}
-        max={45}
+        label="Длина засечки"
+        value={serif.length}
+        min={1}
+        max={2}
         step={1}
-        suffix="°"
-        onChange={(stressAngle) => patch({ stressAngle })}
+        suffix=" col"
+        onChange={(length) => patchSerif({ length })}
       />
-      <Slider
-        label="Вылет засечки"
-        value={antiqua.serifLength}
-        min={0}
-        max={2.5}
-        step={0.05}
-        onChange={(serifLength) => patch({ serifLength })}
-      />
-      <Slider
-        label="Толщина засечки"
-        value={antiqua.serifThickness}
-        min={0}
-        max={1.2}
-        step={0.05}
-        onChange={(serifThickness) => patch({ serifThickness })}
-      />
-      <Slider
-        label="Скругление кронштейна (Bracket)"
-        value={antiqua.bracketRadius}
-        min={0}
-        max={1.5}
-        step={0.05}
-        onChange={(bracketRadius) => patch({ bracketRadius })}
-      />
-      <RadioGroup<AntiquaTerminalType>
-        label="Терминал"
-        value={antiqua.terminalType}
-        columns={3}
+      <RadioGroup<SerifType>
+        label="Форма"
+        value={serif.type}
+        columns={2}
         options={[
-          { value: 'serif', label: 'Засечка' },
-          { value: 'ball', label: 'Капля' },
-          { value: 'beak', label: 'Клюв' },
+          { value: 'bilateral', label: 'Двусторонняя (Slab)' },
+          { value: 'unilateral', label: 'Односторонняя (Флаг)' },
         ]}
-        onChange={(terminalType) => patch({ terminalType })}
+        onChange={(type) => patchSerif({ type })}
+      />
+      <Checkbox
+        label="Верхние засечки"
+        checked={serif.applyToCap}
+        onChange={(applyToCap) => patchSerif({ applyToCap })}
+        disabled={!serif.enabled}
+      />
+      <Checkbox
+        label="Нижние засечки"
+        checked={serif.applyToBase}
+        onChange={(applyToBase) => patchSerif({ applyToBase })}
+        disabled={!serif.enabled}
       />
       <p className="-mt-1 text-[10px] leading-snug text-studio-faint">
-        W(θ) = W_thin + (W_thick − W_thin)·|sin(θ − α)|. Засечки и капли
-        объединяются в единый контур (union) при экспорте OTF.
+        Засечки ставятся на терминалах стоек по Cap-Height (ряд 4) и Baseline (ряд 23).
       </p>
     </Accordion>
   );

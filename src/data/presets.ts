@@ -7,10 +7,10 @@ import type {
   LigatureLibrary,
   PresetFilePayload,
   PresetLibrary,
-  AntiquaParams,
+  SerifParams,
   StyleParams,
 } from '../types/fontTypes';
-import { DEFAULT_ANTIQUA_PARAMS, FILL_ORDER_COLUMNS, MODULE_OVAL } from '../types/fontTypes';
+import { DEFAULT_SERIF_PARAMS, FILL_ORDER_COLUMNS, MODULE_OVAL } from '../types/fontTypes';
 import { normalizeLigatureLibrary } from '../engine/ligatures';
 
 export const PRESET_FILE_FORMAT = 'crt-font-studio-presets-v3';
@@ -53,7 +53,7 @@ export const REGULAR_PARAMS: StyleParams = {
   showGuides: false,
   showGrid: false,
 
-  antiqua: { ...DEFAULT_ANTIQUA_PARAMS },
+  serif: { ...DEFAULT_SERIF_PARAMS },
 
   kerningPairs: {},
 };
@@ -135,7 +135,7 @@ const STRING_KEYS = [
 export function normalizeParams(raw: unknown): StyleParams {
   const out: StyleParams = {
     ...REGULAR_PARAMS,
-    antiqua: { ...DEFAULT_ANTIQUA_PARAMS },
+    serif: { ...DEFAULT_SERIF_PARAMS },
     kerningPairs: {},
   };
   if (!raw || typeof raw !== 'object') {
@@ -168,36 +168,26 @@ export function normalizeParams(raw: unknown): StyleParams {
   }
 
 
-  const antiquaRaw = source.antiqua ?? source.serif;
-  if (antiquaRaw && typeof antiquaRaw === 'object') {
-    const src = antiquaRaw as Record<string, unknown>;
-    const antiqua: AntiquaParams = { ...DEFAULT_ANTIQUA_PARAMS };
-    if (typeof src.enabled === 'boolean') antiqua.enabled = src.enabled;
-    if (src.style === 'old-style' || src.style === 'transitional' || src.style === 'modern') {
-      antiqua.style = src.style;
+  const serifRaw = source.serif;
+  if (serifRaw && typeof serifRaw === 'object') {
+    const serifSource = serifRaw as Record<string, unknown>;
+    const serif: SerifParams = { ...DEFAULT_SERIF_PARAMS };
+    if (typeof serifSource.enabled === 'boolean') {
+      serif.enabled = serifSource.enabled;
     }
-    if (typeof src.contrastRatio === 'number' && Number.isFinite(src.contrastRatio)) {
-      antiqua.contrastRatio = Math.min(8, Math.max(1.5, src.contrastRatio));
+    if (typeof serifSource.length === 'number' && Number.isFinite(serifSource.length)) {
+      serif.length = Math.min(2, Math.max(1, Math.round(serifSource.length)));
     }
-    if (typeof src.stressAngle === 'number' && Number.isFinite(src.stressAngle)) {
-      antiqua.stressAngle = Math.min(45, Math.max(-45, src.stressAngle));
+    if (serifSource.type === 'bilateral' || serifSource.type === 'unilateral') {
+      serif.type = serifSource.type;
     }
-    if (typeof src.serifLength === 'number' && Number.isFinite(src.serifLength)) {
-      antiqua.serifLength = Math.min(2.5, Math.max(0, src.serifLength));
-    } else if (typeof src.length === 'number' && Number.isFinite(src.length)) {
-      // migrate legacy slab length (1–2 cols) → relative serifLength
-      antiqua.serifLength = Math.min(2.5, Math.max(0.25, Number(src.length)));
+    if (typeof serifSource.applyToCap === 'boolean') {
+      serif.applyToCap = serifSource.applyToCap;
     }
-    if (typeof src.serifThickness === 'number' && Number.isFinite(src.serifThickness)) {
-      antiqua.serifThickness = Math.min(1.2, Math.max(0, src.serifThickness));
+    if (typeof serifSource.applyToBase === 'boolean') {
+      serif.applyToBase = serifSource.applyToBase;
     }
-    if (typeof src.bracketRadius === 'number' && Number.isFinite(src.bracketRadius)) {
-      antiqua.bracketRadius = Math.min(1.5, Math.max(0, src.bracketRadius));
-    }
-    if (src.terminalType === 'serif' || src.terminalType === 'ball' || src.terminalType === 'beak') {
-      antiqua.terminalType = src.terminalType;
-    }
-    out.antiqua = antiqua;
+    out.serif = serif;
   }
 
   const kerning = source.kerningPairs;
