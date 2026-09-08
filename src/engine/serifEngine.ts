@@ -32,6 +32,10 @@ const MIN_SERIF_TRACKING = 1;
  * Round and oval glyphs carry no serifs at all: their apex and foot are arcs,
  * and a lit neighbour cell there turns the bowl into a horned shape.
  * Glyph names in `uniXXXX` form resolve to the same entries.
+ *
+ * «Ю» is deliberately absent: its left side is a straight full-height stem
+ * that takes serifs, while the ring is already protected by the arc and
+ * closed-counter rules below.
  */
 export const SERIF_BLACKLIST: ReadonlySet<string> = new Set([
   'O',
@@ -42,7 +46,6 @@ export const SERIF_BLACKLIST: ReadonlySet<string> = new Set([
   'О', // uni041E
   'С', // uni0421
   'Э', // uni042D
-  'Ю', // uni042E
 ]);
 
 /** `uniXXXX` glyph name to its character, or the input when it is not a name. */
