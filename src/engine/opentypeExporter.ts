@@ -104,7 +104,12 @@ function buildLigatureOutline(trigger: string, ctx: RenderContext, scale: number
   const p = ctx.params;
   const baseCoords = tokenCoords(trigger, p.colScale, p.rowScale, ctx.customGlyphs, ctx.ligatures);
   const baseCols = ligatureWidth(trigger, ctx.ligatures) * Math.max(1, p.colScale);
-  const { coords, width: advanceCols } = applySlabSerifs(baseCoords, baseCols, p.serif);
+  const { coords, width: advanceCols } = applySlabSerifs(
+    baseCoords,
+    baseCols,
+    p.serif,
+    p.colScale,
+  );
   const charMap =
     p.moduleType === MODULE_FONT ? fontCharMap(coords, ctx, trigger) : new Map<number, string[]>();
 
@@ -153,7 +158,12 @@ function buildGlyphOutline(
   const p = ctx.params;
   const baseCoords = getGlyph(ch, p.colScale, p.rowScale, ctx.customGlyphs, versionIndex);
   const baseCols = glyphWidth(ch, ctx.customGlyphs, versionIndex) * Math.max(1, p.colScale);
-  const { coords, width: advanceCols } = applySlabSerifs(baseCoords, baseCols, p.serif);
+  const { coords, width: advanceCols } = applySlabSerifs(
+    baseCoords,
+    baseCols,
+    p.serif,
+    p.colScale,
+  );
   const charMap =
     p.moduleType === MODULE_FONT ? fontCharMap(coords, ctx, ch) : new Map<number, string[]>();
 

@@ -26,12 +26,17 @@ export type KerningPairs = Readonly<Record<string, number>>;
 /** Slab serif generation mode. */
 export type SerifType = 'bilateral' | 'unilateral';
 
-/** Parametric slab-serif controls for one style. */
+/** Serif reach in grid modules; 0 turns serifs off. */
+export const SERIF_MAX_WIDTH = 2;
+
+/**
+ * Parametric slab-serif controls for one style.
+ * Serifs are extra grid cells lit next to stem terminals — the very same
+ * module (shape, radii, opacity) as the rest of the glyph, never a free path.
+ */
 export interface SerifParams {
-  /** Master switch for serif generation. */
-  enabled: boolean;
-  /** Serif reach in grid columns: 1 or 2. */
-  length: number;
+  /** Serif reach in grid modules: 0 (off), 1 or 2 cells per side. */
+  width: number;
   /** Bilateral (slab) or unilateral (flag) serifs. */
   type: SerifType;
   /** Place serifs on Cap-Height (row 4). */
@@ -41,8 +46,7 @@ export interface SerifParams {
 }
 
 export const DEFAULT_SERIF_PARAMS: SerifParams = {
-  enabled: false,
-  length: 1,
+  width: 0,
   type: 'bilateral',
   applyToCap: true,
   applyToBase: true,

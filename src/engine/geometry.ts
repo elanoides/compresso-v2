@@ -425,16 +425,6 @@ export function canvasBox(
 }
 
 /** Place a string on the grid, applying kerning between adjacent glyphs. */
-
-/** Base glyph modules with optional slab-serif overlay (render / export only). */
-export function glyphModulesWithSerifs(
-  coords: GlyphMatrix,
-  width: number,
-  serif: StyleParams['serif'],
-): { coords: GlyphMatrix; width: number } {
-  return applySlabSerifs(coords, width, serif);
-}
-
 export function layoutText(
   text: string,
   p: StyleParams,
@@ -463,7 +453,7 @@ export function layoutText(
       continue;
     }
 
-    const seriffed = applySlabSerifs(baseCoords, baseAdvance, p.serif);
+    const seriffed = applySlabSerifs(baseCoords, baseAdvance, p.serif, p.colScale);
     for (const [col, row] of seriffed.coords) {
       const absCol = cursor + col;
       if (absCol > maxCol) {
@@ -662,6 +652,7 @@ function gridGhosts(
   parts: string[],
   ctx: RenderContext,
   box: CanvasBox,
+  startCol: number,
   cols: number,
   minRow: number,
   maxRow: number,
@@ -671,7 +662,7 @@ function gridGhosts(
   const filled = new Set(occupied.map(([col, row]) => cellKey(col, row)));
   parts.push('<g>');
   for (let r = minRow; r <= maxRow; r += 1) {
-    for (let c = 0; c < cols; c += 1) {
+    for (let c = startCol; c < startCol + cols; c += 1) {
       if (filled.has(cellKey(c, r))) {
         continue;
       }
@@ -700,10 +691,18 @@ export interface TextSvgOptions {
 
 export interface GlyphFrame {
   box: CanvasBox;
+  /** Total columns of the drawing, serif expansion included. */
   cols: number;
+  /** Columns of the editable matrix, tracking included. */
+  baseCols: number;
   minRow: number;
   maxRow: number;
+  /** Every module to draw: the glyph matrix plus its serif cells. */
   coords: GlyphMatrix;
+  /** Editable matrix only, in display columns — the paint targets. */
+  baseCoords: GlyphMatrix;
+  /** Display column of matrix column 0, pushed right by left-edge serifs. */
+  serifShift: number;
 }
 
 /** Shared canvas metrics for the inspector SVG and the paint overlay. */
@@ -711,18 +710,21 @@ export function glyphFrame(ch: string, ctx: RenderContext): GlyphFrame {
   const p = ctx.params;
   const custom = ctx.customGlyphs;
   const ligatures = ctx.ligatures ?? {};
-  const coords = isLigatureTrigger(ch, ligatures)
+  const matrix = isLigatureTrigger(ch, ligatures)
     ? tokenCoords(ch, p.colScale, p.rowScale, custom, ligatures)
     : getGlyph(ch, p.colScale, p.rowScale, custom);
   const minRow = 0;
   const maxRow = ROWS_TOTAL - 1;
-  const cols = isBlank(ch)
+  const baseCols = isBlank(ch)
     ? SPACE_WIDTH_COLS * Math.max(1, p.colScale) + p.letterSpacing
     : isLigatureTrigger(ch, ligatures)
       ? tokenAdvance(ch, p.colScale, custom, ligatures) + p.letterSpacing
       : scaledWidth(ch, p.colScale, custom) + p.letterSpacing;
+  const baseWidth = Math.max(1, Math.ceil(baseCols - p.letterSpacing));
+  const seriffed = applySlabSerifs(matrix, baseWidth, p.serif, p.colScale);
+  const cols = Math.max(baseCols, seriffed.width + p.letterSpacing);
   const maxCol = Math.max(cols - 1, 0);
-  const modules: PlacedModule[] = coords.map(([col, row]) => ({
+  const modules: PlacedModule[] = seriffed.coords.map(([col, row]) => ({
     col,
     row,
     char: ch,
@@ -738,7 +740,20 @@ export function glyphFrame(ch: string, ctx: RenderContext): GlyphFrame {
     true,
     false,
   );
-  return { box, cols, minRow, maxRow, coords };
+  const baseCoords: GlyphMatrix =
+    seriffed.shift === 0
+      ? matrix
+      : matrix.map(([col, row]) => [col + seriffed.shift, row] as GridCoord);
+  return {
+    box,
+    cols,
+    baseCols,
+    minRow,
+    maxRow,
+    coords: seriffed.coords,
+    baseCoords,
+    serifShift: seriffed.shift,
+  };
 }
 
 function svgOpen(
@@ -852,30 +867,8 @@ export function renderGlyphSvg(
   options?: TextSvgOptions,
 ): string {
   const p = ctx.params;
-  const frame = glyphFrame(ch, ctx);
-  const baseWidth = Math.max(1, Math.ceil(frame.cols - p.letterSpacing));
-  const seriffed = applySlabSerifs(frame.coords, baseWidth, p.serif);
-  const coords = seriffed.coords;
-  const minRow = frame.minRow;
-  const maxRow = frame.maxRow;
-  const cols = Math.max(frame.cols, seriffed.width + p.letterSpacing);
-  const maxCol = Math.max(cols - 1, 0);
-  const modules: PlacedModule[] = coords.map(([col, row]) => ({
-    col,
-    row,
-    char: ch,
-  }));
-  const extraRight = p.showGuides ? GUIDE_LABEL_PAD : 0;
-  const box = canvasBoxFromModules(
-    p,
-    modules,
-    minRow,
-    maxCol,
-    maxRow,
-    extraRight,
-    true,
-    false,
-  );
+  const { box, cols, minRow, maxRow, coords, baseCoords, serifShift, baseCols } =
+    glyphFrame(ch, ctx);
   const contain = options?.contain === true;
   const paintBackground = options?.paintBackground !== false;
   const showGhosts = options?.ghosts === true || p.showGrid;
@@ -890,7 +883,7 @@ export function renderGlyphSvg(
   }
   if (showGhosts) {
     // Ghosts stay on the editable base matrix so serifs are not paint targets.
-    gridGhosts(parts, ctx, box, cols, minRow, maxRow, frame.coords);
+    gridGhosts(parts, ctx, box, serifShift, baseCols, minRow, maxRow, baseCoords);
   }
   if (p.showGuides) {
     glyphMetricGuides(parts, p, box, cols, minRow, maxRow);

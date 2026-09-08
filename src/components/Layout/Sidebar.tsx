@@ -13,6 +13,7 @@ import {
   MODULE_CUSTOM_SVG,
   MODULE_FONT,
   MODULE_OVAL,
+  SERIF_MAX_WIDTH,
   type FillOrder,
   type ModuleType,
   type SerifType,
@@ -603,21 +604,18 @@ function SerifSection({
     onChange({ serif: { ...serif, ...partial } });
   };
 
+  const off = serif.width === 0;
+
   return (
     <Accordion title="Засечки (Serif)">
-      <Checkbox
-        label="Включить засечки (Slab Serifs)"
-        checked={serif.enabled}
-        onChange={(enabled) => patchSerif({ enabled })}
-      />
       <Slider
-        label="Длина засечки"
-        value={serif.length}
-        min={1}
-        max={2}
+        label="Serif Width"
+        value={serif.width}
+        min={0}
+        max={SERIF_MAX_WIDTH}
         step={1}
-        suffix=" col"
-        onChange={(length) => patchSerif({ length })}
+        suffix=" мод."
+        onChange={(width) => patchSerif({ width })}
       />
       <RadioGroup<SerifType>
         label="Форма"
@@ -633,16 +631,18 @@ function SerifSection({
         label="Верхние засечки"
         checked={serif.applyToCap}
         onChange={(applyToCap) => patchSerif({ applyToCap })}
-        disabled={!serif.enabled}
+        disabled={off}
       />
       <Checkbox
         label="Нижние засечки"
         checked={serif.applyToBase}
         onChange={(applyToBase) => patchSerif({ applyToBase })}
-        disabled={!serif.enabled}
+        disabled={off}
       />
       <p className="-mt-1 text-[10px] leading-snug text-studio-faint">
-        Засечки ставятся на терминалах стоек по Cap-Height (ряд 4) и Baseline (ряд 23).
+        Засечка — это те же модули, зажжённые слева и справа от терминалов стоек по Cap-Height
+        (ряд 4) и Baseline (ряд 23). 0 — без засечек. Внутри замкнутых контуров («О», «Ф», «Ю»)
+        засечки не ставятся, а вылет за край расширяет матрицу глифа.
       </p>
     </Accordion>
   );

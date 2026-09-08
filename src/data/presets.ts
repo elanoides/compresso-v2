@@ -10,7 +10,12 @@ import type {
   SerifParams,
   StyleParams,
 } from '../types/fontTypes';
-import { DEFAULT_SERIF_PARAMS, FILL_ORDER_COLUMNS, MODULE_OVAL } from '../types/fontTypes';
+import {
+  DEFAULT_SERIF_PARAMS,
+  FILL_ORDER_COLUMNS,
+  MODULE_OVAL,
+  SERIF_MAX_WIDTH,
+} from '../types/fontTypes';
 import { normalizeLigatureLibrary } from '../engine/ligatures';
 
 export const PRESET_FILE_FORMAT = 'crt-font-studio-presets-v3';
@@ -172,11 +177,15 @@ export function normalizeParams(raw: unknown): StyleParams {
   if (serifRaw && typeof serifRaw === 'object') {
     const serifSource = serifRaw as Record<string, unknown>;
     const serif: SerifParams = { ...DEFAULT_SERIF_PARAMS };
-    if (typeof serifSource.enabled === 'boolean') {
-      serif.enabled = serifSource.enabled;
-    }
-    if (typeof serifSource.length === 'number' && Number.isFinite(serifSource.length)) {
-      serif.length = Math.min(2, Math.max(1, Math.round(serifSource.length)));
+    const clampWidth = (value: number) =>
+      Math.min(SERIF_MAX_WIDTH, Math.max(0, Math.round(value)));
+    if (typeof serifSource.width === 'number' && Number.isFinite(serifSource.width)) {
+      serif.width = clampWidth(serifSource.width);
+    } else if (typeof serifSource.length === 'number' && Number.isFinite(serifSource.length)) {
+      // Presets saved before the Serif Width slider stored {enabled, length}.
+      serif.width = serifSource.enabled === false ? 0 : clampWidth(serifSource.length);
+    } else if (serifSource.enabled === true) {
+      serif.width = 1;
     }
     if (serifSource.type === 'bilateral' || serifSource.type === 'unilateral') {
       serif.type = serifSource.type;

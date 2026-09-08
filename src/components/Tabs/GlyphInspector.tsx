@@ -225,7 +225,7 @@ export function GlyphInspector({
     (displayCol: number, displayRow: number, paintMode: PaintMode) => {
       const colScale = Math.max(1, context.params.colScale);
       const rowScale = Math.max(1, context.params.rowScale);
-      const col = Math.floor(displayCol / colScale);
+      const col = Math.floor((displayCol - frame.serifShift) / colScale);
       const row = rowScale <= 1 ? displayRow : Math.min(ROWS_TOTAL - 1, Math.round(displayRow / rowScale));
       if (col < 0 || col >= baseWidth || row < 0 || row >= ROWS_TOTAL) {
         return;
@@ -243,7 +243,7 @@ export function GlyphInspector({
       }
       commitCoords(setGlyphCell(snap.coords, col, row, filled), snap.width);
     },
-    [baseWidth, char, commitCoords, context.params.colScale, context.params.rowScale, customGlyphs, editingLigature, ligDraft, ligatures],
+    [baseWidth, char, commitCoords, context.params.colScale, context.params.rowScale, customGlyphs, editingLigature, frame.serifShift, ligDraft, ligatures],
   );
 
   const invertGrid = useCallback(() => {
@@ -832,11 +832,11 @@ function GridPaintLayer({
 
   const occupied = useMemo(() => {
     const keys = new Set<string>();
-    for (const [col, row] of frame.coords) {
+    for (const [col, row] of frame.baseCoords) {
       keys.add(`${col}:${row}`);
     }
     return keys;
-  }, [frame.coords]);
+  }, [frame.baseCoords]);
 
   const hitCell = useCallback(
     (event: ReactPointerEvent<SVGSVGElement>): { col: number; row: number } | null => {
@@ -856,7 +856,7 @@ function GridPaintLayer({
       const [hw, hh] = moduleInkExtents(p);
       let best: { col: number; row: number; dist: number } | null = null;
       for (let row = frame.minRow; row <= frame.maxRow; row += 1) {
-        for (let col = 0; col < paintCols; col += 1) {
+        for (let col = frame.serifShift; col < frame.serifShift + paintCols; col += 1) {
           const [cx, cy] = transformedCenter(
             col,
             row,
