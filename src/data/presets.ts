@@ -171,7 +171,6 @@ export function normalizeParams(raw: unknown): StyleParams {
     out.moduleFontFillOrder = FILL_ORDER_COLUMNS;
   }
 
-
   const serifRaw = source.serif;
   if (serifRaw && typeof serifRaw === 'object') {
     const src = serifRaw as Record<string, unknown>;

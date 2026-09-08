@@ -1,5 +1,5 @@
 /**
- * Style names from live parameters: Condensed Light Diamond Italic Glitch.
+ * Style names from live parameters: Condensed Light Slab Diamond Italic Glitch.
  * Collisions resolve with optical density grades 100–900 (then ±10 / ±25).
  */
 
@@ -55,6 +55,10 @@ export function getBaseName(params: StyleParams): string {
     tokens.push('Black');
   } else if (area > BOLD_AREA) {
     tokens.push('Bold');
+  }
+
+  if (params.serif.enabled) {
+    tokens.push(params.serif.mode === 'single-stretched' ? 'Slab' : 'Serif');
   }
 
   if (diamondAngle(params.moduleAngle)) {
