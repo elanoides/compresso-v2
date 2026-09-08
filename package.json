@@ -1,9 +1,9 @@
 {
-  "name": "crt-parametric-font-studio",
+  "name": "compresso-parametric-studio-v3",
   "private": true,
-  "version": "2.0.0",
+  "version": "3.0.0",
   "type": "module",
-  "description": "CRT Parametric Font Studio — client-side modular font editor with TTF/ZIP export",
+  "description": "Compresso Parametric Font Studio v3 — client-side modular font editor with OTF/ZIP export",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

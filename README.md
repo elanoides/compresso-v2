@@ -1,6 +1,8 @@
-# CRT Parametric Font Studio
+# Compresso Parametric Font Studio v3
 
 Параметрический редактор модульных All-Caps шрифтов, работающий полностью в браузере.
+Это **третья** самостоятельная версия студии: v1 и v2 не затрагиваются.
+
 Ни бэкенда, ни серверных вычислений: рендеринг превью, векторизация контуров, сборка
 OpenType-бинарника и упаковка ZIP-архива происходят на клиенте.
 
@@ -28,8 +30,11 @@ npm run dev
 публикует `dist/` на GitHub Pages. В настройках репозитория *Settings → Pages*
 источник должен быть выставлен в **GitHub Actions**.
 
-Сборка использует `base: '/compresso-parametric-studio-v2/'` — при переименовании
-репозитория нужно обновить `REPO_BASE` в `vite.config.ts`.
+Сборка использует `base: '/compresso-parametric-studio-v3/'`. Сайт после публикации:
+
+`https://elanoides.github.io/compresso-parametric-studio-v3/`
+
+При переименовании репозитория обновите `REPO_BASE` в `vite.config.ts`.
 
 ---
 
