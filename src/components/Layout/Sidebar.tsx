@@ -13,10 +13,9 @@ import {
   MODULE_CUSTOM_SVG,
   MODULE_FONT,
   MODULE_OVAL,
-  SERIF_MAX_WIDTH,
   type FillOrder,
   type ModuleType,
-  type SerifType,
+  type SerifMode,
   type StyleParams,
 } from '../../types/fontTypes';
 
@@ -604,46 +603,24 @@ function SerifSection({
     onChange({ serif: { ...serif, ...partial } });
   };
 
-  const off = serif.width === 0;
-
   return (
     <Accordion title="Засечки (Serif)">
-      <Slider
-        label="Serif Width"
-        value={serif.width}
-        min={0}
-        max={SERIF_MAX_WIDTH}
-        step={1}
-        suffix=" мод."
-        onChange={(width) => patchSerif({ width })}
+      <Checkbox
+        label="Включить засечки"
+        checked={serif.enabled}
+        onChange={(enabled) => patchSerif({ enabled })}
       />
-      <RadioGroup<SerifType>
-        label="Форма"
-        value={serif.type}
+      <RadioGroup<SerifMode>
+        label="Тип засечки"
+        value={serif.mode}
         columns={2}
         options={[
-          { value: 'bilateral', label: 'Двусторонняя (Slab)' },
-          { value: 'unilateral', label: 'Односторонняя (Флаг)' },
+          { value: 'single-stretched', label: 'Один длинный овал' },
+          { value: 'two-modules', label: '2 модуля' },
         ]}
-        onChange={(type) => patchSerif({ type })}
+        onChange={(mode) => patchSerif({ mode })}
+        disabled={!serif.enabled}
       />
-      <Checkbox
-        label="Верхние засечки"
-        checked={serif.applyToCap}
-        onChange={(applyToCap) => patchSerif({ applyToCap })}
-        disabled={off}
-      />
-      <Checkbox
-        label="Нижние засечки"
-        checked={serif.applyToBase}
-        onChange={(applyToBase) => patchSerif({ applyToBase })}
-        disabled={off}
-      />
-      <p className="-mt-1 text-[10px] leading-snug text-studio-faint">
-        Засечка — это те же модули, зажжённые слева и справа от терминалов стоек по Cap-Height
-        (ряд 4) и Baseline (ряд 23). 0 — без засечек. Внутри замкнутых контуров («О», «Ф», «Ю»)
-        засечки не ставятся, а вылет за край расширяет матрицу глифа.
-      </p>
     </Accordion>
   );
 }

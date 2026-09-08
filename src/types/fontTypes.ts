@@ -23,34 +23,29 @@ export type FillOrder = typeof FILL_ORDER_COLUMNS | typeof FILL_ORDER_ROWS;
 /** Kerning deltas in grid-column units, keyed by a two-character pair. */
 export type KerningPairs = Readonly<Record<string, number>>;
 
-/** Slab serif generation mode. */
-export type SerifType = 'bilateral' | 'unilateral';
-
-/** Serif reach in grid modules; 0 turns serifs off. */
-export const SERIF_MAX_WIDTH = 2;
-
 /**
- * Parametric slab-serif controls for one style.
- * Serifs are extra grid cells lit next to stem terminals — the very same
- * module (shape, radii, opacity) as the rest of the glyph, never a free path.
+ * How a serif is drawn at a stem terminal.
+ * `single-stretched` — one module stretched sideways into a bar under the stem.
+ * `two-modules` — one plain module lit left and right of the stem.
  */
-export interface SerifParams {
-  /** Serif reach in grid modules: 0 (off), 1 or 2 cells per side. */
-  width: number;
-  /** Bilateral (slab) or unilateral (flag) serifs. */
-  type: SerifType;
-  /** Place serifs on Cap-Height (row 4). */
-  applyToCap: boolean;
-  /** Place serifs on Baseline (row 23). */
-  applyToBase: boolean;
+export type SerifMode = 'single-stretched' | 'two-modules';
+
+/** Serif controls for one style. */
+export interface SerifSettings {
+  enabled: boolean;
+  mode: SerifMode;
 }
 
-export const DEFAULT_SERIF_PARAMS: SerifParams = {
-  width: 0,
-  type: 'bilateral',
-  applyToCap: true,
-  applyToBase: true,
+export const DEFAULT_SERIF_SETTINGS: SerifSettings = {
+  enabled: false,
+  mode: 'two-modules',
 };
+
+/** How far a stretched serif bar reaches from its stem cell, in grid cells. */
+export interface SerifReach {
+  left: number;
+  right: number;
+}
 
 /**
  * Every parameter that defines one style (начертание).
@@ -101,7 +96,7 @@ export interface StyleParams {
   showGrid: boolean;
 
   // Serifs
-  serif: SerifParams;
+  serif: SerifSettings;
 
   // Kerning
   kerningPairs: KerningPairs;
@@ -199,6 +194,8 @@ export interface PlacedModule {
   col: number;
   row: number;
   char: string;
+  /** Set on serif bars: the module is stretched over these neighbour cells. */
+  serif?: SerifReach;
 }
 
 export interface TextLayout {

@@ -18,6 +18,7 @@ import {
   type GridCoord,
   type PlacedModule,
   type RenderContext,
+  type SerifReach,
   type StyleParams,
   type TextLayout,
 } from '../types/fontTypes';
@@ -297,14 +298,35 @@ function rotateAttr(p: StyleParams, cx: number, cy: number): string {
     : '';
 }
 
+/**
+ * A serif bar is the current module stretched sideways over its neighbour
+ * cells: `dx` re-centres it on the covered span, `rx` is the grown horizontal
+ * radius and `scaleX` stretches non-elliptical modules by the same amount.
+ */
+export function serifBarGeometry(
+  p: StyleParams,
+  serif?: SerifReach,
+): { dx: number; rx: number; scaleX: number } {
+  if (!serif) {
+    return { dx: 0, rx: p.rx, scaleX: 1 };
+  }
+  const rx = p.rx + ((serif.left + serif.right) / 2) * p.stepX;
+  return {
+    dx: ((serif.right - serif.left) / 2) * p.stepX,
+    rx,
+    scaleX: rx / Math.max(p.rx, EPSILON),
+  };
+}
+
 function ellipseModule(
   cx: number,
   cy: number,
   p: StyleParams,
   fillOpacity: number,
+  rx: number,
 ): string {
   return (
-    `<ellipse cx="${f2(cx)}" cy="${f2(cy)}" rx="${f2(p.rx)}" ry="${f2(p.ry)}"` +
+    `<ellipse cx="${f2(cx)}" cy="${f2(cy)}" rx="${f2(rx)}" ry="${f2(p.ry)}"` +
     rotateAttr(p, cx, cy) +
     ` fill="${p.fill}" fill-opacity="${fillOpacity.toFixed(3)}"` +
     ` stroke="${p.stroke}" stroke-width="${f2(p.strokeWidth)}"/>`
@@ -337,14 +359,16 @@ function customSvgModule(
   cy: number,
   p: StyleParams,
   fillOpacity: number,
+  scaleX: number,
 ): string {
   const data = stampPathData(p);
   if (!data) {
-    return ellipseModule(cx, cy, p, fillOpacity);
+    return ellipseModule(cx, cy, p, fillOpacity, p.rx * scaleX);
   }
+  const stretch = Math.abs(scaleX - 1) < EPSILON ? '' : ` scale(${f2(scaleX)},1)`;
   return (
     `<g${rotateAttr(p, cx, cy)}>` +
-    `<g transform="translate(${f2(cx)},${f2(cy)})">` +
+    `<g transform="translate(${f2(cx)},${f2(cy)})${stretch}">` +
     `<path d="${data}" fill="${p.fill}" fill-opacity="${fillOpacity.toFixed(3)}"` +
     ` stroke="${p.stroke}" stroke-width="${f2(p.strokeWidth)}"/>` +
     '</g></g>'
@@ -357,6 +381,7 @@ function fontSymbolModule(
   ctx: RenderContext,
   chars: readonly string[],
   fillOpacity: number,
+  scaleX: number,
 ): string {
   const p = ctx.params;
   const drawable = chars.filter((ch) => Boolean(ctx.fontPaths[ch]));
@@ -371,7 +396,7 @@ function fontSymbolModule(
     // scale(u, -u): outlines are Y-up, SVG is Y-down.
     parts.push(
       `<g transform="translate(${f2(cx)},${f2(cy + dy)}) ` +
-        `scale(${uniform.toFixed(4)},${(-uniform).toFixed(4)})">` +
+        `scale(${(uniform * scaleX).toFixed(4)},${(-uniform).toFixed(4)})">` +
         `<path d="${ctx.fontPaths[ch]}" fill="${p.fill}"` +
         ` fill-opacity="${fillOpacity.toFixed(3)}" stroke="${p.stroke}"` +
         ` stroke-width="${(p.strokeWidth / uniform).toFixed(4)}"/></g>`,
@@ -388,15 +413,19 @@ function moduleSvgAt(
   ctx: RenderContext,
   fillOpacity: number,
   chars?: readonly string[],
+  serif?: SerifReach,
 ): string {
-  switch (ctx.params.moduleType) {
+  const p = ctx.params;
+  const bar = serifBarGeometry(p, serif);
+  const x = cx + bar.dx;
+  switch (p.moduleType) {
     case MODULE_OVAL:
-      return ellipseModule(cx, cy, ctx.params, fillOpacity);
+      return ellipseModule(x, cy, p, fillOpacity, bar.rx);
     case MODULE_CUSTOM_SVG:
-      return customSvgModule(cx, cy, ctx.params, fillOpacity);
+      return customSvgModule(x, cy, p, fillOpacity, bar.scaleX);
     case MODULE_FONT:
       return chars && chars.length > 0
-        ? fontSymbolModule(cx, cy, ctx, chars, fillOpacity)
+        ? fontSymbolModule(x, cy, ctx, chars, fillOpacity, bar.scaleX)
         : '';
     default:
       return '';
@@ -455,6 +484,9 @@ export function layoutText(
     }
 
     const seriffed = applySlabSerifs(token, baseCoords, baseAdvance, p.serif, p.colScale);
+    for (const bar of seriffed.bars) {
+      modules.push({ ...bar, col: cursor + bar.col });
+    }
     for (const [col, row] of seriffed.coords) {
       const absCol = cursor + col;
       if (absCol > maxCol) {
@@ -520,10 +552,16 @@ export function canvasBoxFromModules(
 
   for (const m of modules) {
     const [cx, cy] = transformedCenter(m.col, m.row, p, 0, 0, minRow, m.char);
-    minX = Math.min(minX, cx - hw);
-    maxX = Math.max(maxX, cx + hw);
-    minY = Math.min(minY, cy - hh);
-    maxY = Math.max(maxY, cy + hh);
+    const bar = serifBarGeometry(p, m.serif);
+    const [barHw, barHh] = m.serif
+      ? ellipseHalfExtents(bar.rx, p.ry, p.moduleAngle)
+      : [hw - strokeMargin(p), hh - strokeMargin(p)];
+    const halfW = barHw + strokeMargin(p);
+    const halfH = barHh + strokeMargin(p);
+    minX = Math.min(minX, cx + bar.dx - halfW);
+    maxX = Math.max(maxX, cx + bar.dx + halfW);
+    minY = Math.min(minY, cy - halfH);
+    maxY = Math.max(maxY, cy + halfH);
   }
 
   const tracking = includeTracking ? Math.max(0, effectiveLetterSpacing(p)) * p.stepX : 0;
@@ -700,6 +738,8 @@ export interface GlyphFrame {
   maxRow: number;
   /** Every module to draw: the glyph matrix plus its serif cells. */
   coords: GlyphMatrix;
+  /** Stretched serif bars, drawn as one elongated module each. */
+  bars: PlacedModule[];
   /** Editable matrix only, in display columns — the paint targets. */
   baseCoords: GlyphMatrix;
   /** Display column of matrix column 0, pushed right by left-edge serifs. */
@@ -726,11 +766,10 @@ export function glyphFrame(ch: string, ctx: RenderContext): GlyphFrame {
   const seriffed = applySlabSerifs(ch, matrix, baseWidth, p.serif, p.colScale);
   const cols = Math.max(baseCols, seriffed.width + tracking);
   const maxCol = Math.max(cols - 1, 0);
-  const modules: PlacedModule[] = seriffed.coords.map(([col, row]) => ({
-    col,
-    row,
-    char: ch,
-  }));
+  const modules: PlacedModule[] = [
+    ...seriffed.coords.map(([col, row]) => ({ col, row, char: ch })),
+    ...seriffed.bars,
+  ];
   const extraRight = p.showGuides ? GUIDE_LABEL_PAD : 0;
   const box = canvasBoxFromModules(
     p,
@@ -753,6 +792,7 @@ export function glyphFrame(ch: string, ctx: RenderContext): GlyphFrame {
     minRow,
     maxRow,
     coords: seriffed.coords,
+    bars: seriffed.bars,
     baseCoords,
     serifShift: seriffed.shift,
   };
@@ -855,7 +895,7 @@ export function renderTextSvg(
       m.char,
     );
     const chars = charMaps.get(m.char)?.get(cellKey(m.col, m.row));
-    parts.push(moduleSvgAt(cx, cy, ctx, p.fillOpacity, chars));
+    parts.push(moduleSvgAt(cx, cy, ctx, p.fillOpacity, chars, m.serif));
   }
   parts.push('</g></svg>');
 
@@ -869,7 +909,7 @@ export function renderGlyphSvg(
   options?: TextSvgOptions,
 ): string {
   const p = ctx.params;
-  const { box, cols, minRow, maxRow, coords, baseCoords, serifShift, baseCols } =
+  const { box, cols, minRow, maxRow, coords, bars, baseCoords, serifShift, baseCols } =
     glyphFrame(ch, ctx);
   const contain = options?.contain === true;
   const paintBackground = options?.paintBackground !== false;
@@ -892,9 +932,17 @@ export function renderGlyphSvg(
   }
 
   const charMap =
-    p.moduleType === MODULE_FONT ? fontCharMap(coords, ctx, ch) : new Map<number, string[]>();
+    p.moduleType === MODULE_FONT
+      ? fontCharMap([...coords, ...bars.map((bar) => [bar.col, bar.row] as GridCoord)], ctx, ch)
+      : new Map<number, string[]>();
 
   parts.push('<g>');
+  for (const bar of bars) {
+    const [cx, cy] = transformedCenter(bar.col, bar.row, p, box.originX, box.originY, minRow, ch);
+    parts.push(
+      moduleSvgAt(cx, cy, ctx, p.fillOpacity, charMap.get(cellKey(bar.col, bar.row)), bar.serif),
+    );
+  }
   for (const [col, row] of coords) {
     const [cx, cy] = transformedCenter(col, row, p, box.originX, box.originY, minRow, ch);
     parts.push(moduleSvgAt(cx, cy, ctx, p.fillOpacity, charMap.get(cellKey(col, row))));
@@ -909,13 +957,16 @@ export function renderGlyphSvg(
  * exporter. Returns an empty array when the module has nothing to draw.
  */
 export function moduleOutlineSegments(
-  cx: number,
+  cxRaw: number,
   cy: number,
   ctx: RenderContext,
   scale: number,
   chars?: readonly string[],
+  serif?: SerifReach,
 ): PathSegment[] {
   const p = ctx.params;
+  const bar = serifBarGeometry(p, serif);
+  const cx = cxRaw + bar.dx * scale;
 
   // Outline space is Y-up while SVG rotation is Y-down, hence the negated angle.
   const applyRotation = (
@@ -928,7 +979,7 @@ export function moduleOutlineSegments(
       : segments;
 
   const oval = (): PathSegment[] =>
-    applyRotation(ellipseSegments(cx, cy, p.rx * scale, p.ry * scale), cx, cy);
+    applyRotation(ellipseSegments(cx, cy, bar.rx * scale, p.ry * scale), cx, cy);
 
   if (p.moduleType === MODULE_OVAL) {
     return unifyContourWinding(oval());
@@ -944,7 +995,7 @@ export function moduleOutlineSegments(
       applyRotation(
         transformSegments(
           shape.segments,
-          multiply(translation(cx, cy), scaling(uniform, -uniform)),
+          multiply(translation(cx, cy), scaling(uniform * bar.scaleX, -uniform)),
         ),
         cx,
         cy,
@@ -963,7 +1014,7 @@ export function moduleOutlineSegments(
       const dyFont = -symbolYOffset(index, drawable.length, p.ry) * scale;
       const placed = transformSegments(
         cachedFontSegments(ctx.fontPaths[ch]),
-        multiply(translation(cx, cy + dyFont), scaling(uniform, uniform)),
+        multiply(translation(cx, cy + dyFont), scaling(uniform * bar.scaleX, uniform)),
       );
       out.push(...applyRotation(placed, cx, cy + dyFont));
     });

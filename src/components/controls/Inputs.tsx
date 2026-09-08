@@ -333,6 +333,7 @@ interface RadioGroupProps<T extends string> {
   options: ReadonlyArray<{ value: T; label: string }>;
   onChange: (value: T) => void;
   columns?: number;
+  disabled?: boolean;
 }
 
 export function RadioGroup<T extends string>({
@@ -341,9 +342,10 @@ export function RadioGroup<T extends string>({
   options,
   onChange,
   columns = 1,
+  disabled = false,
 }: RadioGroupProps<T>) {
   return (
-    <div>
+    <div className={disabled ? 'opacity-40' : undefined}>
       {label ? <FieldLabel>{label}</FieldLabel> : null}
       <div
         className="grid gap-1"
@@ -359,12 +361,15 @@ export function RadioGroup<T extends string>({
               type="button"
               role="radio"
               aria-checked={active}
+              disabled={disabled}
               onClick={() => onChange(option.value)}
               className={
                 'rounded border px-2 py-1.5 text-[11px] transition-colors ' +
+                (disabled ? 'cursor-not-allowed ' : '') +
                 (active
                   ? 'border-white bg-studio-raised font-semibold text-white'
-                  : 'border-studio-border bg-studio-panel text-studio-muted hover:border-studio-border-strong hover:text-studio-text')
+                  : 'border-studio-border bg-studio-panel text-studio-muted' +
+                    (disabled ? '' : ' hover:border-studio-border-strong hover:text-studio-text'))
               }
             >
               {option.label}

@@ -162,7 +162,7 @@ export function GlyphInspector({
         : glyphWidth(char, customGlyphs);
   const columns = baseWidth * Math.max(1, context.params.colScale);
   const frame = useMemo(() => glyphFrame(char, inspectorContext), [char, inspectorContext]);
-  const modules = frame.coords;
+  const moduleCount = frame.coords.length + frame.bars.length;
   const currentCoords = useMemo(
     () =>
       editingLigature && ligDraft
@@ -625,7 +625,7 @@ export function GlyphInspector({
               className="ml-auto truncate font-mono text-[11px] tabular-nums"
               style={{ color: '#666' }}
             >
-              Модулей: {modules.length}
+              Модулей: {moduleCount}
               {'  ·  '}
               Колонок: {columns}
               {'  ·  '}

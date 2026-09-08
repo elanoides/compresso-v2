@@ -11,7 +11,12 @@
 
 import * as opentype from 'opentype.js';
 
-import { MODULE_FONT, type RenderContext, type StyleParams } from '../types/fontTypes';
+import {
+  MODULE_FONT,
+  type GridCoord,
+  type RenderContext,
+  type StyleParams,
+} from '../types/fontTypes';
 import { serializeStudioMetadata } from './fontLoader';
 import { BASELINE, BODY_TOP, ROWS_TOTAL, fontCharset, getGlyph, glyphWidth } from './glyphs';
 import {
@@ -19,6 +24,7 @@ import {
   fontCharMap,
   moduleCenterFontUnits,
   moduleOutlineSegments,
+  serifBarGeometry,
 } from './geometry';
 import { type KernPair, buildGposKernTable, buildGsubTable, buildLegacyKernTable, injectTables, type LigaRule, type GsubAlternateSet, type GsubSinglePair } from './sfnt';
 import {
@@ -104,7 +110,7 @@ function buildLigatureOutline(trigger: string, ctx: RenderContext, scale: number
   const p = ctx.params;
   const baseCoords = tokenCoords(trigger, p.colScale, p.rowScale, ctx.customGlyphs, ctx.ligatures);
   const baseCols = ligatureWidth(trigger, ctx.ligatures) * Math.max(1, p.colScale);
-  const { coords, width: advanceCols } = applySlabSerifs(
+  const { coords, bars, width: advanceCols } = applySlabSerifs(
     trigger,
     baseCoords,
     baseCols,
@@ -112,7 +118,13 @@ function buildLigatureOutline(trigger: string, ctx: RenderContext, scale: number
     p.colScale,
   );
   const charMap =
-    p.moduleType === MODULE_FONT ? fontCharMap(coords, ctx, trigger) : new Map<number, string[]>();
+    p.moduleType === MODULE_FONT
+      ? fontCharMap(
+          [...coords, ...bars.map((bar) => [bar.col, bar.row] as GridCoord)],
+          ctx,
+          trigger,
+        )
+      : new Map<number, string[]>();
 
   const segments: PathSegment[] = [];
   const [halfWidth, halfHeight] = ellipseHalfExtents(
@@ -133,6 +145,29 @@ function buildLigatureOutline(trigger: string, ctx: RenderContext, scale: number
     yMin = Math.min(yMin, cy - halfHeight);
     yMax = Math.max(yMax, cy + halfHeight);
     xMax = Math.max(xMax, cx + halfWidth);
+  }
+
+  for (const bar of bars) {
+    const [cx, cy] = moduleCenterFontUnits(bar.col, bar.row, p, scale, trigger);
+    segments.push(
+      ...moduleOutlineSegments(
+        cx,
+        cy,
+        ctx,
+        scale,
+        charMap.get(Math.trunc(bar.col) * 4096 + bar.row),
+        bar.serif,
+      ),
+    );
+    const stretch = serifBarGeometry(p, bar.serif);
+    const [barHalfWidth, barHalfHeight] = ellipseHalfExtents(
+      stretch.rx * scale,
+      p.ry * scale,
+      p.moduleAngle,
+    );
+    yMin = Math.min(yMin, cy - barHalfHeight);
+    yMax = Math.max(yMax, cy + barHalfHeight);
+    xMax = Math.max(xMax, cx + stretch.dx * scale + barHalfWidth);
   }
 
   const advanceWidth = Math.max(
@@ -159,7 +194,7 @@ function buildGlyphOutline(
   const p = ctx.params;
   const baseCoords = getGlyph(ch, p.colScale, p.rowScale, ctx.customGlyphs, versionIndex);
   const baseCols = glyphWidth(ch, ctx.customGlyphs, versionIndex) * Math.max(1, p.colScale);
-  const { coords, width: advanceCols } = applySlabSerifs(
+  const { coords, bars, width: advanceCols } = applySlabSerifs(
     ch,
     baseCoords,
     baseCols,
@@ -167,7 +202,13 @@ function buildGlyphOutline(
     p.colScale,
   );
   const charMap =
-    p.moduleType === MODULE_FONT ? fontCharMap(coords, ctx, ch) : new Map<number, string[]>();
+    p.moduleType === MODULE_FONT
+      ? fontCharMap(
+          [...coords, ...bars.map((bar) => [bar.col, bar.row] as GridCoord)],
+          ctx,
+          ch,
+        )
+      : new Map<number, string[]>();
 
   const segments: PathSegment[] = [];
   const [halfWidth, halfHeight] = ellipseHalfExtents(
@@ -188,6 +229,29 @@ function buildGlyphOutline(
     yMin = Math.min(yMin, cy - halfHeight);
     yMax = Math.max(yMax, cy + halfHeight);
     xMax = Math.max(xMax, cx + halfWidth);
+  }
+
+  for (const bar of bars) {
+    const [cx, cy] = moduleCenterFontUnits(bar.col, bar.row, p, scale, ch);
+    segments.push(
+      ...moduleOutlineSegments(
+        cx,
+        cy,
+        ctx,
+        scale,
+        charMap.get(Math.trunc(bar.col) * 4096 + bar.row),
+        bar.serif,
+      ),
+    );
+    const stretch = serifBarGeometry(p, bar.serif);
+    const [barHalfWidth, barHalfHeight] = ellipseHalfExtents(
+      stretch.rx * scale,
+      p.ry * scale,
+      p.moduleAngle,
+    );
+    yMin = Math.min(yMin, cy - barHalfHeight);
+    yMax = Math.max(yMax, cy + barHalfHeight);
+    xMax = Math.max(xMax, cx + stretch.dx * scale + barHalfWidth);
   }
 
   const advanceWidth = Math.max(

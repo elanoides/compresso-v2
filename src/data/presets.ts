@@ -7,14 +7,13 @@ import type {
   LigatureLibrary,
   PresetFilePayload,
   PresetLibrary,
-  SerifParams,
+  SerifSettings,
   StyleParams,
 } from '../types/fontTypes';
 import {
-  DEFAULT_SERIF_PARAMS,
+  DEFAULT_SERIF_SETTINGS,
   FILL_ORDER_COLUMNS,
   MODULE_OVAL,
-  SERIF_MAX_WIDTH,
 } from '../types/fontTypes';
 import { normalizeLigatureLibrary } from '../engine/ligatures';
 
@@ -58,7 +57,7 @@ export const REGULAR_PARAMS: StyleParams = {
   showGuides: false,
   showGrid: false,
 
-  serif: { ...DEFAULT_SERIF_PARAMS },
+  serif: { ...DEFAULT_SERIF_SETTINGS },
 
   kerningPairs: {},
 };
@@ -140,7 +139,7 @@ const STRING_KEYS = [
 export function normalizeParams(raw: unknown): StyleParams {
   const out: StyleParams = {
     ...REGULAR_PARAMS,
-    serif: { ...DEFAULT_SERIF_PARAMS },
+    serif: { ...DEFAULT_SERIF_SETTINGS },
     kerningPairs: {},
   };
   if (!raw || typeof raw !== 'object') {
@@ -175,26 +174,16 @@ export function normalizeParams(raw: unknown): StyleParams {
 
   const serifRaw = source.serif;
   if (serifRaw && typeof serifRaw === 'object') {
-    const serifSource = serifRaw as Record<string, unknown>;
-    const serif: SerifParams = { ...DEFAULT_SERIF_PARAMS };
-    const clampWidth = (value: number) =>
-      Math.min(SERIF_MAX_WIDTH, Math.max(0, Math.round(value)));
-    if (typeof serifSource.width === 'number' && Number.isFinite(serifSource.width)) {
-      serif.width = clampWidth(serifSource.width);
-    } else if (typeof serifSource.length === 'number' && Number.isFinite(serifSource.length)) {
-      // Presets saved before the Serif Width slider stored {enabled, length}.
-      serif.width = serifSource.enabled === false ? 0 : clampWidth(serifSource.length);
-    } else if (serifSource.enabled === true) {
-      serif.width = 1;
+    const src = serifRaw as Record<string, unknown>;
+    const serif: SerifSettings = { ...DEFAULT_SERIF_SETTINGS };
+    if (typeof src.enabled === 'boolean') {
+      serif.enabled = src.enabled;
+    } else if (typeof src.width === 'number' && Number.isFinite(src.width)) {
+      // Presets saved while serifs were measured by a Serif Width slider.
+      serif.enabled = src.width > 0;
     }
-    if (serifSource.type === 'bilateral' || serifSource.type === 'unilateral') {
-      serif.type = serifSource.type;
-    }
-    if (typeof serifSource.applyToCap === 'boolean') {
-      serif.applyToCap = serifSource.applyToCap;
-    }
-    if (typeof serifSource.applyToBase === 'boolean') {
-      serif.applyToBase = serifSource.applyToBase;
+    if (src.mode === 'single-stretched' || src.mode === 'two-modules') {
+      serif.mode = src.mode;
     }
     out.serif = serif;
   }

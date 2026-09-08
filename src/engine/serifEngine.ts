@@ -1,15 +1,20 @@
 /**
- * Modular serif engine — slab serifs made of grid cells.
+ * Modular serif engine — slab serifs made of the current module.
  *
- * A serif is never a free-form contour: it is one or two extra cells lit next
- * to a stem terminal, drawn later with the very same module as every other
- * cell of the glyph. Terminals are looked up on Cap-Height (row 4) and
- * Baseline (row 23). The editable glyph matrix is never mutated — the overlay
- * lives only in the render and export pipelines.
+ * A serif is never a free-form contour. Either one plain module is lit on each
+ * side of a stem terminal, or one module is stretched sideways into a bar over
+ * the same cells. Terminals are looked up on Cap-Height (row 4) and Baseline
+ * (row 23). The editable glyph matrix is never mutated — the overlay lives
+ * only in the render and export pipelines.
  */
 
-import type { GlyphMatrix, GridCoord, SerifParams, StyleParams } from '../types/fontTypes';
-import { SERIF_MAX_WIDTH } from '../types/fontTypes';
+import type {
+  GlyphMatrix,
+  GridCoord,
+  PlacedModule,
+  SerifSettings,
+  StyleParams,
+} from '../types/fontTypes';
 import { BASELINE, BODY_TOP, ROWS_TOTAL, sortCoords } from './glyphs';
 
 /** Anatomical anchor rows (match the 28-row All-Caps grid). */
@@ -68,8 +73,8 @@ export function isSerifBlacklisted(token: string): boolean {
 }
 
 /** Whether this style generates serifs at all. */
-export function serifsActive(serif: SerifParams | undefined): boolean {
-  return Math.round(serif?.width ?? 0) > 0 && Boolean(serif?.applyToCap || serif?.applyToBase);
+export function serifsActive(serif: SerifSettings | undefined): boolean {
+  return serif?.enabled === true;
 }
 
 /**
@@ -84,7 +89,10 @@ export function effectiveLetterSpacing(p: StyleParams): number {
 }
 
 export interface SerifResult {
+  /** Glyph matrix plus, in `two-modules` mode, the lit serif cells. */
   coords: GlyphMatrix;
+  /** Stretched serif bars, one per terminal, in `single-stretched` mode. */
+  bars: PlacedModule[];
   width: number;
   /** Columns the base matrix moved right to make room for left-edge serifs. */
   shift: number;
@@ -218,120 +226,112 @@ function isVerticalTerminal(
   return stemRunLength(grid, col, row, inward) >= MIN_STEM_RUN;
 }
 
-function serifDirections(
-  col: number,
-  width: number,
-  type: SerifParams['type'],
-): readonly (-1 | 1)[] {
-  if (type === 'bilateral') {
-    return [-1, 1];
-  }
-  // Unilateral (flag): only the outward side relative to the glyph centre.
-  const center = (width - 1) / 2;
-  if (col < center - 0.25) {
-    return [-1];
-  }
-  if (col > center + 0.25) {
-    return [1];
-  }
-  // Centre stem (I, T): keep both flags so the stem stays balanced.
-  return [-1, 1];
-}
-
 /**
  * Overlay modular serifs onto the matrix of `token`.
  *
- * Round glyphs from `SERIF_BLACKLIST` come back untouched. Serif cells land on
- * the very row of the terminal, one module at a time, and `colScale` is the
- * matrix density multiplier: one design module is that many grid cells wide,
- * so a serif of width 1 always reaches exactly one module. Cells that fall
- * past the left or right edge widen the matrix (and shift the letter right
- * when needed) so the glyph keeps its proportions instead of being squeezed.
+ * Round glyphs from `SERIF_BLACKLIST` come back untouched. Every serif sits on
+ * the very row of its terminal and reaches one design module to each side,
+ * which is `colScale` grid cells. In `two-modules` mode those cells are lit as
+ * plain modules; in `single-stretched` mode they stay empty and the terminal
+ * gets one module stretched across them. Either way the reach is the same, so
+ * cells past the left or right edge widen the matrix (and shift the letter
+ * right when needed) and the glyph keeps its proportions instead of being
+ * squeezed.
  */
 export function applySlabSerifs(
   token: string,
   coords: GlyphMatrix,
   width: number,
-  serif: SerifParams,
+  serif: SerifSettings,
   colScale = 1,
 ): SerifResult {
-  const scale = Math.max(1, Math.round(colScale));
-  const modules = Math.min(SERIF_MAX_WIDTH, Math.max(0, Math.round(serif?.width ?? 0)));
-  const reach = modules * scale;
-  if (reach === 0 || coords.length === 0 || width <= 0) {
-    return { coords, width: Math.max(width, 0), shift: 0 };
-  }
-  if (!serif.applyToCap && !serif.applyToBase) {
-    return { coords, width, shift: 0 };
+  const reach = Math.max(1, Math.round(colScale));
+  const empty: SerifResult = { coords, bars: [], width: Math.max(width, 0), shift: 0 };
+  if (!serifsActive(serif) || coords.length === 0 || width <= 0) {
+    return empty;
   }
   if (isSerifBlacklisted(token)) {
-    return { coords, width, shift: 0 };
+    return empty;
   }
 
   const { grid, cols } = occupancy(coords, width);
   const outside = exteriorMask(grid, cols);
   const glyphWidth = Math.max(width, cols);
 
-  const additions: GridCoord[] = [];
+  /** How far the serif may reach from `col` before it hits ink or a counter. */
+  const freeRun = (col: number, row: number, dir: -1 | 1): number => {
+    let run = 0;
+    for (let step = 1; step <= reach; step += 1) {
+      const next = col + dir * step;
+      if (next >= 0 && next < cols && (grid[row]![next] || !outside[row]![next])) {
+        break;
+      }
+      run += 1;
+    }
+    return run;
+  };
+
+  const cells: GridCoord[] = [];
+  const bars: PlacedModule[] = [];
 
   const scanRow = (row: number, side: 'cap' | 'base') => {
     for (let col = 0; col < glyphWidth; col += 1) {
-      if (!isVerticalTerminal(grid, col, row, cols, scale, side)) {
+      if (!isVerticalTerminal(grid, col, row, cols, reach, side)) {
         continue;
       }
-      for (const dir of serifDirections(col, glyphWidth, serif.type)) {
-        for (let step = 1; step <= reach; step += 1) {
-          const nextCol = col + dir * step;
-          const insideMatrix = nextCol >= 0 && nextCol < cols;
-          if (insideMatrix) {
-            // Stop at existing ink so serifs never bridge two stems.
-            if (grid[row]![nextCol]) {
-              break;
-            }
-            // Never light a cell trapped in a closed counter (О, Ф, Ю).
-            if (!outside[row]![nextCol]) {
-              break;
-            }
-          }
-          // Columns past the edge are legal: the matrix grows below.
-          additions.push([nextCol, row]);
-        }
+      const left = freeRun(col, row, -1);
+      const right = freeRun(col, row, 1);
+      if (left === 0 && right === 0) {
+        continue;
+      }
+      if (serif.mode === 'single-stretched') {
+        bars.push({ col, row, char: token, serif: { left, right } });
+      }
+      for (let step = 1; step <= left; step += 1) {
+        cells.push([col - step, row]);
+      }
+      for (let step = 1; step <= right; step += 1) {
+        cells.push([col + step, row]);
       }
     }
   };
 
-  if (serif.applyToCap) {
-    scanRow(SERIF_CAP_HEIGHT_ROW, 'cap');
-  }
-  if (serif.applyToBase) {
-    scanRow(SERIF_BASELINE_ROW, 'base');
-  }
+  scanRow(SERIF_CAP_HEIGHT_ROW, 'cap');
+  scanRow(SERIF_BASELINE_ROW, 'base');
 
-  if (additions.length === 0) {
-    return { coords, width: glyphWidth, shift: 0 };
+  if (cells.length === 0) {
+    return { coords, bars: [], width: glyphWidth, shift: 0 };
   }
 
   let minCol = 0;
-  let maxSerifCol = glyphWidth - 1;
-  for (const [col] of coords) {
+  let maxCol = glyphWidth - 1;
+  for (const [col] of [...coords, ...cells]) {
     if (col < minCol) minCol = col;
-    if (col > maxSerifCol) maxSerifCol = col;
-  }
-  for (const [col] of additions) {
-    if (col < minCol) minCol = col;
-    if (col > maxSerifCol) maxSerifCol = col;
+    if (col > maxCol) maxCol = col;
   }
 
   const shift = minCol < 0 ? -minCol : 0;
-  const nextWidth = Math.max(glyphWidth + shift, maxSerifCol + shift + 1);
+  const nextWidth = Math.max(glyphWidth + shift, maxCol + shift + 1);
 
+  // A bar is centred on its terminal and fully covers that module, so the
+  // stem cell is handed over to the bar instead of being drawn twice.
+  const barCells = new Set(bars.map((bar) => `${bar.col}:${bar.row}`));
   const merged: GridCoord[] = [];
   for (const [col, row] of coords) {
-    merged.push([col + shift, row]);
+    if (!barCells.has(`${col}:${row}`)) {
+      merged.push([col + shift, row]);
+    }
   }
-  for (const [col, row] of additions) {
-    merged.push([col + shift, row]);
+  if (serif.mode === 'two-modules') {
+    for (const [col, row] of cells) {
+      merged.push([col + shift, row]);
+    }
   }
 
-  return { coords: sortCoords(merged), width: nextWidth, shift };
+  return {
+    coords: sortCoords(merged),
+    bars: bars.map((bar) => ({ ...bar, col: bar.col + shift })),
+    width: nextWidth,
+    shift,
+  };
 }
