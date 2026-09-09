@@ -726,6 +726,21 @@ export interface TextSvgOptions {
   contain?: boolean;
   /** Draw empty-cell ghosts even when coordinate lines are off. */
   ghosts?: boolean;
+  /**
+   * Force a stable viewBox (e.g. max extent across an animation timeline) so
+   * step / letter-spacing morphs stay visible instead of re-fitting every frame.
+   */
+  fixedViewBox?: { width: number; height: number };
+  /**
+   * Animation frame: lock viewBox size and baseline Y so Grid step X/Y change
+   * the on-screen letter size instead of scaling away with the viewBox.
+   */
+  lockedFrame?: {
+    width: number;
+    height: number;
+    /** ViewBox Y of the typographic baseline — shared across every frame. */
+    baselineY: number;
+  };
 }
 
 export interface GlyphFrame {
@@ -839,6 +854,8 @@ export function renderTextSvg(
   const contain = options?.contain === true;
   const extraRight = p.showGuides ? GUIDE_LABEL_PAD : 0;
   const includeGrid = p.showGrid || p.showGuides;
+  // Always keep tracking in the metrics box so letter-spacing morphs affect
+  // width — contain-mode used to drop the trailing advance and hide gaps.
   const box = canvasBoxFromModules(
     p,
     modules,
@@ -847,12 +864,28 @@ export function renderTextSvg(
     maxRow,
     extraRight,
     includeGrid,
-    !contain,
+    true,
   );
   const paintBackground = options?.paintBackground !== false;
+  const locked = options?.lockedFrame;
+  const frameWidth = locked
+    ? locked.width
+    : Math.max(box.width, options?.fixedViewBox?.width ?? 0);
+  const frameHeight = locked
+    ? locked.height
+    : Math.max(box.height, options?.fixedViewBox?.height ?? 0);
+
+  // Center horizontally in the locked/fixed frame.
+  let originX = box.originX + (frameWidth - box.width) / 2;
+  let originY = box.originY + (frameHeight - box.height) / 2;
+  if (locked) {
+    // Pin baseline row to locked.baselineY so stepY grows letters from the
+    // baseline instead of re-fitting the whole composition.
+    originY = locked.baselineY - (BASELINE - minRow) * p.stepY;
+  }
 
   const parts: string[] = [
-    svgOpen(box.width, box.height, Math.max(0.05, displayScale), contain),
+    svgOpen(frameWidth, frameHeight, Math.max(0.05, displayScale), contain),
   ];
   if (paintBackground) {
     parts.push(`<rect width="100%" height="100%" fill="${p.background}"/>`);
@@ -875,12 +908,13 @@ export function renderTextSvg(
     }
   }
 
+  const drawBox: CanvasBox = { ...box, originX, originY, width: frameWidth, height: frameHeight };
   if (p.showGrid) {
-    gridLines(parts, p, box, Math.ceil(maxCol) + 1, minRow, maxRow);
+    gridLines(parts, p, drawBox, Math.ceil(maxCol) + 1, minRow, maxRow);
   }
   if (p.showGuides) {
     const hw = moduleInkExtents(p)[0];
-    baselineGuide(parts, p, box, minRow, box.originX + maxCol * p.stepX + hw);
+    baselineGuide(parts, p, drawBox, minRow, originX + maxCol * p.stepX + hw);
   }
 
   parts.push('<g>');
@@ -889,8 +923,8 @@ export function renderTextSvg(
       m.col,
       m.row,
       p,
-      box.originX,
-      box.originY,
+      originX,
+      originY,
       minRow,
       m.char,
     );

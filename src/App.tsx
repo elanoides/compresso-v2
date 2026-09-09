@@ -2,7 +2,8 @@ import { useCallback, useState } from 'react';
 
 import { Header } from './components/Layout/Header';
 import { Sidebar } from './components/Layout/Sidebar';
-import { RenameOfferDialog } from './components/Modal';
+import { RenameOfferDialog, ScopeConfirmDialog } from './components/Modal';
+import { AnimationStudio } from './components/Tabs/AnimationStudio';
 import { GlyphInspector } from './components/Tabs/GlyphInspector';
 import { PresetsGallery } from './components/Tabs/PresetsGallery';
 import { WordTester } from './components/Tabs/WordTester';
@@ -15,7 +16,9 @@ import {
   generateStyleName,
   nextOrdinalStyleName,
 } from './engine/nameGenerator';
+import type { ApplyScope } from './engine/styleAssets';
 import { useStudio } from './hooks/useStudio';
+import type { Ligature } from './types/fontTypes';
 
 export default function App() {
   const studio = useStudio();
@@ -26,6 +29,18 @@ export default function App() {
   const [loadStatus, setLoadStatus] = useState<string | null>(null);
   const [loadStatusKind, setLoadStatusKind] = useState<'ok' | 'warn' | 'error' | null>(null);
   const [loadBusy, setLoadBusy] = useState(false);
+  const [scopePrompt, setScopePrompt] = useState<{
+    title: string;
+    description: string;
+    run: (scope: ApplyScope) => void;
+  } | null>(null);
+
+  const askScope = useCallback(
+    (title: string, description: string, run: (scope: ApplyScope) => void) => {
+      setScopePrompt({ title, description, run });
+    },
+    [],
+  );
 
   const saveAsNew = useCallback(() => {
     const names = Object.keys(studio.presets);
@@ -69,6 +84,8 @@ export default function App() {
             result.active,
             result.customGlyphs,
             result.ligatures,
+            result.glyphsByStyle,
+            result.ligaturesByStyle,
           );
           const glyphCount = Object.keys(result.customGlyphs).length;
           const ligCount = Object.keys(result.ligatures).length;
@@ -100,6 +117,53 @@ export default function App() {
     [studio],
   );
 
+  const requestSetLigature = useCallback(
+    (trigger: string, entry: Ligature, onDone?: () => void) => {
+      askScope(
+        'Сохранить лигатуру',
+        `Применить лигатуру «${trigger}» только к начертанию «${studio.activePreset}» или ко всем начертаниям?`,
+        (scope) => {
+          studio.setLigature(trigger, entry, scope);
+          onDone?.();
+        },
+      );
+    },
+    [askScope, studio],
+  );
+
+  const requestRemoveLigature = useCallback(
+    (trigger: string) => {
+      askScope(
+        'Удалить лигатуру',
+        `Удалить лигатуру «${trigger}» только из «${studio.activePreset}» или из всех начертаний?`,
+        (scope) => studio.removeLigature(trigger, scope),
+      );
+    },
+    [askScope, studio],
+  );
+
+  const requestKerningPair = useCallback(
+    (pair: string, delta: number) => {
+      askScope(
+        'Кернинговая пара',
+        `Задать пару «${pair}» только для «${studio.activePreset}» или для всех начертаний?`,
+        (scope) => studio.applyKerningPair(pair, delta, scope),
+      );
+    },
+    [askScope, studio],
+  );
+
+  const requestRemoveKerning = useCallback(
+    (pair: string) => {
+      askScope(
+        'Удалить кернинг',
+        `Убрать пару «${pair}» только из «${studio.activePreset}» или из всех начертаний?`,
+        (scope) => studio.removeKerningPair(pair, scope),
+      );
+    },
+    [askScope, studio],
+  );
+
   return (
     <div className="flex h-full flex-col overflow-hidden bg-studio-bg">
       <Header
@@ -126,6 +190,8 @@ export default function App() {
           loadStatus={loadStatus}
           loadStatusKind={loadStatusKind}
           loadBusy={loadBusy}
+          onApplyKerningPair={requestKerningPair}
+          onRemoveKerningPair={requestRemoveKerning}
         />
 
         <main className="min-w-0 flex-1 overflow-hidden p-4">
@@ -138,6 +204,8 @@ export default function App() {
               onTextChange={studio.setWordText}
               previewScale={studio.previewScale}
               onPreviewScaleChange={studio.setPreviewScale}
+              glyphsByStyle={studio.glyphsByStyle}
+              ligaturesByStyle={studio.ligaturesByStyle}
             />
           ) : null}
 
@@ -155,8 +223,8 @@ export default function App() {
               onAddVariant={studio.addCustomGlyphVariant}
               onSelectVariant={studio.selectCustomGlyphVariant}
               onRemoveVariant={studio.removeCustomGlyphVariant}
-              onSetLigature={studio.setLigature}
-              onRemoveLigature={studio.removeLigature}
+              onSetLigature={requestSetLigature}
+              onRemoveLigature={requestRemoveLigature}
               onResetAllGlyphs={() => studio.replaceCustomGlyphs({})}
             />
           ) : null}
@@ -169,8 +237,27 @@ export default function App() {
               onCreate={studio.createPreset}
               onRename={studio.renamePreset}
               onDelete={studio.deletePreset}
-              customGlyphs={studio.customGlyphs}
-              ligatures={studio.ligatures}
+              glyphsByStyle={studio.glyphsByStyle}
+              ligaturesByStyle={studio.ligaturesByStyle}
+            />
+          ) : null}
+
+          {studio.tab === 'animation' ? (
+            <AnimationStudio
+              presets={studio.presets}
+              activePreset={studio.activePreset}
+              text={studio.wordText}
+              onTextChange={studio.setWordText}
+              glyphsByStyle={studio.glyphsByStyle}
+              ligaturesByStyle={studio.ligaturesByStyle}
+              fontPaths={studio.context.fontPaths}
+              fontAlphabet={studio.context.fontAlphabet}
+              onCreatePreset={(name, sourceStyleName) => {
+                const source = sourceStyleName
+                  ? studio.presets[sourceStyleName]
+                  : undefined;
+                return studio.createPreset(name, source, false, sourceStyleName);
+              }}
             />
           ) : null}
         </main>
@@ -182,6 +269,23 @@ export default function App() {
           suggestedName={renameOffer.suggested}
           onApply={applyOfferedName}
           onKeep={() => setRenameOffer(null)}
+        />
+      ) : null}
+
+      {scopePrompt ? (
+        <ScopeConfirmDialog
+          title={scopePrompt.title}
+          styleName={studio.activePreset}
+          description={scopePrompt.description}
+          onCurrent={() => {
+            scopePrompt.run('current');
+            setScopePrompt(null);
+          }}
+          onAll={() => {
+            scopePrompt.run('all');
+            setScopePrompt(null);
+          }}
+          onCancel={() => setScopePrompt(null)}
         />
       ) : null}
     </div>

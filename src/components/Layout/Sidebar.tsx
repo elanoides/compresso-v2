@@ -48,6 +48,8 @@ interface SidebarProps {
   loadStatus: string | null;
   loadStatusKind: 'ok' | 'warn' | 'error' | null;
   loadBusy: boolean;
+  onApplyKerningPair: (pair: string, delta: number) => void;
+  onRemoveKerningPair: (pair: string) => void;
 }
 
 export function Sidebar({
@@ -66,6 +68,8 @@ export function Sidebar({
   loadStatus,
   loadStatusKind,
   loadBusy,
+  onApplyKerningPair,
+  onRemoveKerningPair,
 }: SidebarProps) {
   return (
     <aside className="custom-scrollbar flex h-full w-[320px] shrink-0 flex-col overflow-y-auto border-r border-neutral-800 bg-[#0d0d0d] p-4">
@@ -98,7 +102,11 @@ export function Sidebar({
         <SpacingSection params={params} onChange={onChange} />
         <DeformSection params={params} onChange={onChange} />
         <SerifSection params={params} onChange={onChange} />
-        <KerningSection params={params} onChange={onChange} />
+        <KerningSection
+          params={params}
+          onApplyPair={onApplyKerningPair}
+          onRemovePair={onRemoveKerningPair}
+        />
         <ColorSection params={params} onChange={onChange} />
       </div>
     </aside>
@@ -537,6 +545,10 @@ function SpacingSection({
         step={0.5}
         onChange={(letterSpacing) => onChange({ letterSpacing })}
       />
+      <p className="-mt-1 text-[10px] leading-snug text-studio-faint">
+        Трекинг входит в advanceWidth экспортируемого OTF — сохраните начертание
+        перед выгрузкой семейства.
+      </p>
     </Accordion>
   );
 }
@@ -627,10 +639,12 @@ function SerifSection({
 
 function KerningSection({
   params,
-  onChange,
+  onApplyPair,
+  onRemovePair,
 }: {
   params: StyleParams;
-  onChange: (patch: Partial<StyleParams>) => void;
+  onApplyPair: (pair: string, delta: number) => void;
+  onRemovePair: (pair: string) => void;
 }) {
   const [pair, setPair] = useState('');
   const [delta, setDelta] = useState(0);
@@ -645,17 +659,8 @@ function KerningSection({
     if (!canApply) {
       return;
     }
-    onChange({ kerningPairs: { ...params.kerningPairs, [normalizedPair]: delta } });
-  }, [canApply, delta, normalizedPair, onChange, params.kerningPairs]);
-
-  const removePair = useCallback(
-    (key: string) => {
-      const next = { ...params.kerningPairs };
-      delete next[key];
-      onChange({ kerningPairs: next });
-    },
-    [onChange, params.kerningPairs],
-  );
+    onApplyPair(normalizedPair, delta);
+  }, [canApply, delta, normalizedPair, onApplyPair]);
 
   return (
     <Accordion title="Кернинг">
@@ -699,7 +704,7 @@ function KerningSection({
               </span>
               <button
                 type="button"
-                onClick={() => removePair(key)}
+                onClick={() => onRemovePair(key)}
                 className="text-[10px] text-studio-faint transition-colors hover:text-[#ff5a52]"
                 title={`Удалить пару ${key}`}
               >
@@ -710,7 +715,8 @@ function KerningSection({
         </ul>
       )}
       <p className="text-[10px] leading-snug text-studio-faint">
-        Пары запекаются в экспортируемый шрифт как GPOS и таблица kern.
+        При сохранении пары спросим: только текущее начертание или все. Пары
+        запекаются в шрифт как GPOS и таблица kern.
       </p>
     </Accordion>
   );

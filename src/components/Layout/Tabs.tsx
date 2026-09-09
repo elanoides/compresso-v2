@@ -4,6 +4,7 @@ export const TAB_LABELS: ReadonlyArray<{ id: TabId; label: string }> = [
   { id: 'word', label: 'Наборщик текста' },
   { id: 'glyph', label: 'Инспектор глифа' },
   { id: 'styles', label: 'Начертания' },
+  { id: 'animation', label: 'Анимация' },
 ];
 
 interface TabsProps {

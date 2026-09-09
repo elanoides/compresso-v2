@@ -2,8 +2,9 @@
  * Studio state: the live style, the preset library and the asynchronously
  * loaded font outlines that font-symbol modules need.
  *
- * Everything lives in the browser — the preset library is mirrored into
- * localStorage so a reload keeps the user's work.
+ * Glyph matrices and ligatures are stored per начертание. Kerning lives on
+ * StyleParams (also per style). Legacy localStorage blobs with a single shared
+ * glyph/ligature library are copied onto every style on load.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -27,9 +28,30 @@ import {
 import { uniqueStyleName } from '../engine/nameGenerator';
 import { resolveFontPathsFor } from '../engine/renderContext';
 import { normalizeLigatureLibrary } from '../engine/ligatures';
-import type { CustomGlyph, CustomGlyphLibrary, Ligature, LigatureLibrary, RenderContext, StyleParams, TabId } from '../types/fontTypes';
+import {
+  cloneCustomGlyphLibrary,
+  cloneLigatureLibrary,
+  deleteStyleKey,
+  distributeToStyles,
+  renameStyleKey,
+  type ApplyScope,
+  type StyleScopedGlyphs,
+  type StyleScopedLigatures,
+} from '../engine/styleAssets';
+import type {
+  CustomGlyph,
+  CustomGlyphLibrary,
+  Ligature,
+  LigatureLibrary,
+  RenderContext,
+  StyleParams,
+  TabId,
+} from '../types/fontTypes';
 
-const STORAGE_KEY = 'crt-font-studio/v3';
+const STORAGE_KEY = 'crt-font-studio/v4';
+const LEGACY_STORAGE_KEY = 'crt-font-studio/v3';
+const EMPTY_GLYPHS: CustomGlyphLibrary = {};
+const EMPTY_LIGATURES: LigatureLibrary = {};
 
 interface PersistedState {
   presets: Record<string, StyleParams>;
@@ -38,32 +60,65 @@ interface PersistedState {
   wordText: string;
   previewScale: number;
   inspectChar: string;
-  customGlyphs: CustomGlyphLibrary;
-  ligatures: LigatureLibrary;
+  glyphsByStyle: StyleScopedGlyphs;
+  ligaturesByStyle: StyleScopedLigatures;
+}
+
+function cloneStyleParams(source: StyleParams): StyleParams {
+  return {
+    ...source,
+    kerningPairs: { ...source.kerningPairs },
+    serif: { ...source.serif },
+  };
+}
+
+function readStorageRaw(): string | null {
+  try {
+    return localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
+  } catch {
+    return null;
+  }
 }
 
 function loadPersisted(): PersistedState | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = readStorageRaw();
     if (!raw) {
       return null;
     }
-    const parsed = JSON.parse(raw) as Partial<PersistedState>;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
     if (!parsed.presets || typeof parsed.presets !== 'object') {
       return null;
     }
     const presets: Record<string, StyleParams> = {};
-    for (const [name, params] of Object.entries(parsed.presets)) {
+    for (const [name, params] of Object.entries(parsed.presets as Record<string, unknown>)) {
       presets[name] = normalizeParams(params);
     }
-    // Factory styles are always available even if an old payload lacked them.
     const merged = { ...freshPresetLibrary(), ...presets };
+    const styleNames = Object.keys(merged);
+    const activePreset =
+      typeof parsed.activePreset === 'string' && merged[parsed.activePreset]
+        ? parsed.activePreset
+        : DEFAULT_PRESET_NAME;
+
+    const legacyGlyphs = normalizeCustomGlyphs(parsed.customGlyphs);
+    const legacyLigatures = normalizeLigatureLibrary(parsed.ligatures);
+    const glyphsByStyle = normalizePersistedGlyphMap(
+      parsed.glyphsByStyle,
+      styleNames,
+      legacyGlyphs,
+      activePreset,
+    );
+    const ligaturesByStyle = normalizePersistedLigatureMap(
+      parsed.ligaturesByStyle,
+      styleNames,
+      legacyLigatures,
+      activePreset,
+    );
+
     return {
       presets: merged,
-      activePreset:
-        typeof parsed.activePreset === 'string' && merged[parsed.activePreset]
-          ? parsed.activePreset
-          : DEFAULT_PRESET_NAME,
+      activePreset,
       params: normalizeParams(parsed.params ?? merged[DEFAULT_PRESET_NAME]),
       wordText: typeof parsed.wordText === 'string' ? parsed.wordText : DEFAULT_PHRASE,
       previewScale:
@@ -74,16 +129,64 @@ function loadPersisted(): PersistedState | null {
         typeof parsed.inspectChar === 'string' && parsed.inspectChar
           ? parsed.inspectChar
           : DEFAULT_INSPECT_CHAR,
-      customGlyphs: normalizeCustomGlyphs(
-        (parsed as { customGlyphs?: unknown }).customGlyphs,
-      ),
-      ligatures: normalizeLigatureLibrary(
-        (parsed as { ligatures?: unknown }).ligatures,
-      ),
+      glyphsByStyle,
+      ligaturesByStyle,
     };
   } catch {
     return null;
   }
+}
+
+function normalizePersistedGlyphMap(
+  raw: unknown,
+  styleNames: readonly string[],
+  legacy: CustomGlyphLibrary,
+  activePreset: string,
+): StyleScopedGlyphs {
+  if (raw && typeof raw === 'object') {
+    const out: StyleScopedGlyphs = {};
+    for (const [name, value] of Object.entries(raw as Record<string, unknown>)) {
+      out[name] = normalizeCustomGlyphs(value);
+    }
+    if (Object.keys(out).length > 0) {
+      return out;
+    }
+  }
+  if (Object.keys(legacy).length === 0) {
+    return {};
+  }
+  // Legacy saves kept one shared library. Attach it only to the active style so
+  // other начертания stay on factory matrices until the user edits them.
+  const target =
+    activePreset && styleNames.includes(activePreset)
+      ? activePreset
+      : (styleNames[0] ?? DEFAULT_PRESET_NAME);
+  return { [target]: cloneCustomGlyphLibrary(legacy) };
+}
+
+function normalizePersistedLigatureMap(
+  raw: unknown,
+  styleNames: readonly string[],
+  legacy: LigatureLibrary,
+  activePreset: string,
+): StyleScopedLigatures {
+  if (raw && typeof raw === 'object') {
+    const out: StyleScopedLigatures = {};
+    for (const [name, value] of Object.entries(raw as Record<string, unknown>)) {
+      out[name] = normalizeLigatureLibrary(value);
+    }
+    if (Object.keys(out).length > 0) {
+      return out;
+    }
+  }
+  if (Object.keys(legacy).length === 0) {
+    return {};
+  }
+  const target =
+    activePreset && styleNames.includes(activePreset)
+      ? activePreset
+      : (styleNames[0] ?? DEFAULT_PRESET_NAME);
+  return { [target]: cloneLigatureLibrary(legacy) };
 }
 
 export interface Studio {
@@ -98,7 +201,12 @@ export interface Studio {
   activePreset: string;
   applyPreset: (name: string) => void;
   saveActivePreset: () => void;
-  createPreset: (name: string, source?: StyleParams, activate?: boolean) => string | null;
+  createPreset: (
+    name: string,
+    source?: StyleParams,
+    activate?: boolean,
+    sourceStyleName?: string,
+  ) => string | null;
   createDefaultPreset: (name: string) => string | null;
   renamePreset: (from: string, to: string) => string | null;
   deletePreset: (name: string) => void;
@@ -107,6 +215,8 @@ export interface Studio {
     active: string | null,
     customGlyphs?: CustomGlyphLibrary,
     ligatures?: LigatureLibrary,
+    glyphsByStyle?: StyleScopedGlyphs,
+    ligaturesByStyle?: StyleScopedLigatures,
   ) => void;
   loadStudioSnapshot: (
     presetName: string,
@@ -124,6 +234,7 @@ export interface Studio {
   setInspectChar: (ch: string) => void;
 
   customGlyphs: CustomGlyphLibrary;
+  glyphsByStyle: StyleScopedGlyphs;
   setCustomGlyph: (ch: string, glyph: CustomGlyph) => void;
   mergeCustomGlyphs: (patch: Readonly<Record<string, CustomGlyph>>) => void;
   removeCustomGlyph: (ch: string) => void;
@@ -133,9 +244,13 @@ export interface Studio {
   removeCustomGlyphVariant: (ch: string, index: number) => void;
 
   ligatures: LigatureLibrary;
-  setLigature: (trigger: string, entry: Ligature) => void;
-  removeLigature: (trigger: string) => void;
+  ligaturesByStyle: StyleScopedLigatures;
+  setLigature: (trigger: string, entry: Ligature, scope?: ApplyScope) => void;
+  removeLigature: (trigger: string, scope?: ApplyScope) => void;
   replaceLigatures: (next: LigatureLibrary) => void;
+
+  applyKerningPair: (pair: string, delta: number, scope: ApplyScope) => void;
+  removeKerningPair: (pair: string, scope: ApplyScope) => void;
 
   /** Render context for the live style. */
   context: RenderContext;
@@ -171,17 +286,25 @@ export function useStudio(): Studio {
   const [inspectChar, setInspectChar] = useState(
     () => initial?.inspectChar ?? DEFAULT_INSPECT_CHAR,
   );
-  const [customGlyphs, setCustomGlyphsState] = useState<CustomGlyphLibrary>(
-    () => initial?.customGlyphs ?? {},
+  const [glyphsByStyle, setGlyphsByStyle] = useState<StyleScopedGlyphs>(
+    () => initial?.glyphsByStyle ?? {},
   );
-  const [ligatures, setLigaturesState] = useState<LigatureLibrary>(
-    () => initial?.ligatures ?? {},
+  const [ligaturesByStyle, setLigaturesByStyle] = useState<StyleScopedLigatures>(
+    () => initial?.ligaturesByStyle ?? {},
   );
 
   const [fontPaths, setFontPaths] = useState<Readonly<Record<string, string>>>({});
   const [fontAlphabet, setFontAlphabet] = useState('');
   const [fontLoading, setFontLoading] = useState(false);
   const [fontError, setFontError] = useState<string | null>(null);
+
+  const activePresetRef = useRef(activePreset);
+  activePresetRef.current = activePreset;
+  const presetsRef = useRef(presets);
+  presetsRef.current = presets;
+
+  const customGlyphs = glyphsByStyle[activePreset] ?? EMPTY_GLYPHS;
+  const ligatures = ligaturesByStyle[activePreset] ?? EMPTY_LIGATURES;
 
   /* ---- persistence -------------------------------------------------- */
 
@@ -201,6 +324,9 @@ export function useStudio(): Studio {
             wordText,
             previewScale,
             inspectChar,
+            glyphsByStyle,
+            ligaturesByStyle,
+            // Active-style mirrors for accidental readers of the legacy shape.
             customGlyphs,
             ligatures,
           }),
@@ -214,7 +340,18 @@ export function useStudio(): Studio {
         window.clearTimeout(persistTimer.current);
       }
     };
-  }, [presets, activePreset, params, wordText, previewScale, inspectChar, customGlyphs, ligatures]);
+  }, [
+    presets,
+    activePreset,
+    params,
+    wordText,
+    previewScale,
+    inspectChar,
+    glyphsByStyle,
+    ligaturesByStyle,
+    customGlyphs,
+    ligatures,
+  ]);
 
   /* ---- font outlines ------------------------------------------------ */
 
@@ -261,8 +398,6 @@ export function useStudio(): Studio {
     return () => {
       cancelled = true;
     };
-    // Params object identity changes on every slider move; the key captures the
-    // only fields that can invalidate the loaded outlines.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fontRequestKey]);
 
@@ -276,31 +411,37 @@ export function useStudio(): Studio {
     setParamsState(next);
   }, []);
 
-  const applyPreset = useCallback(
-    (name: string) => {
-      setPresetsState((library) => {
-        const target = library[name];
-        if (target) {
-          setParamsState({ ...target });
-          setActivePreset(name);
-        }
-        return library;
-      });
-    },
-    [],
-  );
+  const applyPreset = useCallback((name: string) => {
+    setPresetsState((library) => {
+      const target = library[name];
+      if (target) {
+        setParamsState(cloneStyleParams(target));
+        setActivePreset(name);
+      }
+      return library;
+    });
+  }, []);
 
   const saveActivePreset = useCallback(() => {
-    setPresetsState((library) => ({ ...library, [activePreset]: { ...params } }));
+    setPresetsState((library) => ({
+      ...library,
+      [activePreset]: cloneStyleParams(params),
+    }));
   }, [activePreset, params]);
 
   const createPreset = useCallback(
-    (rawName: string, source?: StyleParams, activate = true): string | null => {
+    (
+      rawName: string,
+      source?: StyleParams,
+      activate = true,
+      sourceStyleName?: string,
+    ): string | null => {
       const name = rawName.trim();
       if (!name) {
         return 'Введите имя начертания';
       }
-      const snapshot = { ...(source ?? params) };
+      const snapshot = cloneStyleParams(source ?? params);
+      const assetSource = sourceStyleName ?? activePresetRef.current;
       let conflict = false;
       setPresetsState((library) => {
         if (library[name]) {
@@ -312,6 +453,14 @@ export function useStudio(): Studio {
       if (conflict) {
         return `Начертание «${name}» уже существует`;
       }
+      setGlyphsByStyle((current) => ({
+        ...current,
+        [name]: cloneCustomGlyphLibrary(current[assetSource] ?? {}),
+      }));
+      setLigaturesByStyle((current) => ({
+        ...current,
+        [name]: cloneLigatureLibrary(current[assetSource] ?? {}),
+      }));
       if (activate) {
         setParamsState(snapshot);
         setActivePreset(name);
@@ -322,7 +471,7 @@ export function useStudio(): Studio {
   );
 
   const createDefaultPreset = useCallback(
-    (rawName: string): string | null => createPreset(rawName, { ...REGULAR_PARAMS }),
+    (rawName: string): string | null => createPreset(rawName, cloneStyleParams(REGULAR_PARAMS)),
     [createPreset],
   );
 
@@ -353,6 +502,8 @@ export function useStudio(): Studio {
     if (error) {
       return error;
     }
+    setGlyphsByStyle((current) => renameStyleKey(current, from, nextName));
+    setLigaturesByStyle((current) => renameStyleKey(current, from, nextName));
     setActivePreset((current) => (current === from ? nextName : current));
     return null;
   }, []);
@@ -370,12 +521,14 @@ export function useStudio(): Studio {
         }
         const fallback = next[DEFAULT_PRESET_NAME] ? DEFAULT_PRESET_NAME : Object.keys(next)[0];
         if (fallback) {
-          setParamsState({ ...next[fallback] });
+          setParamsState(cloneStyleParams(next[fallback]));
         }
         return fallback ?? DEFAULT_PRESET_NAME;
       });
       return next;
     });
+    setGlyphsByStyle((current) => deleteStyleKey(current, name));
+    setLigaturesByStyle((current) => deleteStyleKey(current, name));
   }, []);
 
   const replaceLibrary = useCallback(
@@ -384,21 +537,40 @@ export function useStudio(): Studio {
       active: string | null,
       importedGlyphs?: CustomGlyphLibrary,
       importedLigatures?: LigatureLibrary,
+      importedGlyphsByStyle?: StyleScopedGlyphs,
+      importedLigaturesByStyle?: StyleScopedLigatures,
     ) => {
+      const importedNames = Object.keys(imported);
       setPresetsState((library) => {
         const merged = { ...library, ...imported };
         const target = active && merged[active] ? active : null;
         if (target) {
           setActivePreset(target);
-          setParamsState({ ...merged[target] });
+          setParamsState(cloneStyleParams(merged[target]));
         }
         return merged;
       });
-      if (importedGlyphs && Object.keys(importedGlyphs).length > 0) {
-        setCustomGlyphsState((current) => ({ ...current, ...importedGlyphs }));
+
+      if (importedGlyphsByStyle && Object.keys(importedGlyphsByStyle).length > 0) {
+        setGlyphsByStyle((current) => ({ ...current, ...importedGlyphsByStyle }));
+      } else if (importedGlyphs && Object.keys(importedGlyphs).length > 0) {
+        const distributed = distributeToStyles(
+          importedGlyphs,
+          importedNames,
+          cloneCustomGlyphLibrary,
+        );
+        setGlyphsByStyle((current) => ({ ...current, ...distributed }));
       }
-      if (importedLigatures && Object.keys(importedLigatures).length > 0) {
-        setLigaturesState((current) => ({ ...current, ...importedLigatures }));
+
+      if (importedLigaturesByStyle && Object.keys(importedLigaturesByStyle).length > 0) {
+        setLigaturesByStyle((current) => ({ ...current, ...importedLigaturesByStyle }));
+      } else if (importedLigatures && Object.keys(importedLigatures).length > 0) {
+        const distributed = distributeToStyles(
+          importedLigatures,
+          importedNames,
+          cloneLigatureLibrary,
+        );
+        setLigaturesByStyle((current) => ({ ...current, ...distributed }));
       }
     },
     [],
@@ -411,7 +583,7 @@ export function useStudio(): Studio {
       glyphs: CustomGlyphLibrary,
       restoredLigatures: LigatureLibrary = {},
     ): string => {
-      const normalized = normalizeParams(source);
+      const normalized = cloneStyleParams(normalizeParams(source));
       const restoredGlyphs = normalizeCustomGlyphs(glyphs);
       const normalizedLigatures = normalizeLigatureLibrary(restoredLigatures);
       let appliedName = presetName.trim() || 'Imported';
@@ -421,112 +593,245 @@ export function useStudio(): Studio {
         setActivePreset(appliedName);
         return { ...library, [appliedName]: normalized };
       });
-      setCustomGlyphsState(restoredGlyphs);
-      setLigaturesState(normalizedLigatures);
+      setGlyphsByStyle((current) => ({
+        ...current,
+        [appliedName]: restoredGlyphs,
+      }));
+      setLigaturesByStyle((current) => ({
+        ...current,
+        [appliedName]: normalizedLigatures,
+      }));
       return appliedName;
     },
     [],
   );
 
-  const setCustomGlyph = useCallback((ch: string, glyph: CustomGlyph) => {
-    setCustomGlyphsState((current) => ({
-      ...current,
-      [ch]: writeActiveGlyph(current[ch], glyph),
-    }));
-  }, []);
+  const patchActiveGlyphs = useCallback(
+    (updater: (current: CustomGlyphLibrary) => CustomGlyphLibrary) => {
+      const styleName = activePresetRef.current;
+      setGlyphsByStyle((all) => {
+        const current = all[styleName] ?? {};
+        const next = updater(current);
+        if (next === current) {
+          return all;
+        }
+        return { ...all, [styleName]: next };
+      });
+    },
+    [],
+  );
 
-  const mergeCustomGlyphs = useCallback((patch: Readonly<Record<string, CustomGlyph>>) => {
-    setCustomGlyphsState((current) => {
-      const next = { ...current };
-      for (const [ch, glyph] of Object.entries(patch)) {
-        next[ch] = writeActiveGlyph(current[ch], glyph);
-      }
-      return next;
-    });
-  }, []);
+  const setCustomGlyph = useCallback(
+    (ch: string, glyph: CustomGlyph) => {
+      patchActiveGlyphs((current) => ({
+        ...current,
+        [ch]: writeActiveGlyph(current[ch], glyph),
+      }));
+    },
+    [patchActiveGlyphs],
+  );
 
-  const removeCustomGlyph = useCallback((ch: string) => {
-    setCustomGlyphsState((current) => {
-      if (!(ch in current)) {
-        return current;
-      }
-      const next = { ...current };
-      delete next[ch];
-      return next;
-    });
-  }, []);
+  const mergeCustomGlyphs = useCallback(
+    (patch: Readonly<Record<string, CustomGlyph>>) => {
+      patchActiveGlyphs((current) => {
+        const next = { ...current };
+        for (const [ch, glyph] of Object.entries(patch)) {
+          next[ch] = writeActiveGlyph(current[ch], glyph);
+        }
+        return next;
+      });
+    },
+    [patchActiveGlyphs],
+  );
+
+  const removeCustomGlyph = useCallback(
+    (ch: string) => {
+      patchActiveGlyphs((current) => {
+        if (!(ch in current)) {
+          return current;
+        }
+        const next = { ...current };
+        delete next[ch];
+        return next;
+      });
+    },
+    [patchActiveGlyphs],
+  );
 
   const replaceCustomGlyphs = useCallback((next: CustomGlyphLibrary) => {
-    setCustomGlyphsState(next);
+    const styleName = activePresetRef.current;
+    setGlyphsByStyle((all) => ({ ...all, [styleName]: next }));
   }, []);
 
-  const addCustomGlyphVariant = useCallback((ch: string) => {
-    setCustomGlyphsState((current) => {
-      const existing = current[ch];
-      const bank = existing ?? {
-        active: 0,
-        versions: [snapshotGlyph(ch, {})],
-      };
-      const next = addGlyphVariant(bank);
-      if (next === bank) {
-        return current;
+  const addCustomGlyphVariant = useCallback(
+    (ch: string) => {
+      patchActiveGlyphs((current) => {
+        const existing = current[ch];
+        const bank = existing ?? {
+          active: 0,
+          versions: [snapshotGlyph(ch, {})],
+        };
+        const next = addGlyphVariant(bank);
+        if (next === bank) {
+          return current;
+        }
+        return { ...current, [ch]: next };
+      });
+    },
+    [patchActiveGlyphs],
+  );
+
+  const selectCustomGlyphVariant = useCallback(
+    (ch: string, index: number) => {
+      patchActiveGlyphs((current) => {
+        if (index <= 0 && !current[ch]) {
+          return current;
+        }
+        const next = ensureGlyphVariant(ch, current[ch], index);
+        return { ...current, [ch]: next };
+      });
+    },
+    [patchActiveGlyphs],
+  );
+
+  const removeCustomGlyphVariant = useCallback(
+    (ch: string, index: number) => {
+      patchActiveGlyphs((current) => {
+        const bank = current[ch];
+        if (!bank) {
+          return current;
+        }
+        const next = removeGlyphVariant(bank, index);
+        if (next === bank) {
+          return current;
+        }
+        return { ...current, [ch]: next };
+      });
+    },
+    [patchActiveGlyphs],
+  );
+
+  const writeLigatureScoped = useCallback((trigger: string, entry: Ligature, scope: ApplyScope) => {
+    if (scope === 'current') {
+      const styleName = activePresetRef.current;
+      setLigaturesByStyle((all) => {
+        const current = all[styleName] ?? {};
+        const prev = current[trigger];
+        if (prev && ligatureUnchanged(prev, entry)) {
+          return all;
+        }
+        return { ...all, [styleName]: { ...current, [trigger]: entry } };
+      });
+      return;
+    }
+    const names = Object.keys(presetsRef.current);
+    setLigaturesByStyle((all) => {
+      const next = { ...all };
+      for (const name of names) {
+        const current = next[name] ?? {};
+        next[name] = { ...current, [trigger]: entry };
       }
-      return { ...current, [ch]: next };
+      return next;
     });
   }, []);
 
-  const selectCustomGlyphVariant = useCallback((ch: string, index: number) => {
-    setCustomGlyphsState((current) => {
-      if (index <= 0 && !current[ch]) {
-        return current;
-      }
-      const next = ensureGlyphVariant(ch, current[ch], index);
-      return { ...current, [ch]: next };
-    });
-  }, []);
+  const setLigature = useCallback(
+    (trigger: string, entry: Ligature, scope: ApplyScope = 'current') => {
+      writeLigatureScoped(trigger, entry, scope);
+    },
+    [writeLigatureScoped],
+  );
 
-  const removeCustomGlyphVariant = useCallback((ch: string, index: number) => {
-    setCustomGlyphsState((current) => {
-      const bank = current[ch];
-      if (!bank) {
-        return current;
+  const removeLigature = useCallback((trigger: string, scope: ApplyScope = 'current') => {
+    if (scope === 'current') {
+      const styleName = activePresetRef.current;
+      setLigaturesByStyle((all) => {
+        const current = all[styleName];
+        if (!current || !(trigger in current)) {
+          return all;
+        }
+        const nextLib = { ...current };
+        delete nextLib[trigger];
+        return { ...all, [styleName]: nextLib };
+      });
+      return;
+    }
+    const names = Object.keys(presetsRef.current);
+    setLigaturesByStyle((all) => {
+      const next = { ...all };
+      for (const name of names) {
+        const current = next[name];
+        if (!current || !(trigger in current)) {
+          continue;
+        }
+        const nextLib = { ...current };
+        delete nextLib[trigger];
+        next[name] = nextLib;
       }
-      const next = removeGlyphVariant(bank, index);
-      if (next === bank) {
-        return current;
-      }
-      return { ...current, [ch]: next };
-    });
-  }, []);
-
-  const setLigature = useCallback((trigger: string, entry: Ligature) => {
-    setLigaturesState((current) => {
-      const prev = current[trigger];
-      if (prev && ligatureUnchanged(prev, entry)) {
-        return current;
-      }
-      return { ...current, [trigger]: entry };
-    });
-  }, []);
-
-  const removeLigature = useCallback((trigger: string) => {
-    setLigaturesState((current) => {
-      if (!(trigger in current)) {
-        return current;
-      }
-      const next = { ...current };
-      delete next[trigger];
       return next;
     });
   }, []);
 
   const replaceLigatures = useCallback((next: LigatureLibrary) => {
-    setLigaturesState(next);
+    const styleName = activePresetRef.current;
+    setLigaturesByStyle((all) => ({ ...all, [styleName]: next }));
+  }, []);
+
+  const applyKerningPair = useCallback((pair: string, delta: number, scope: ApplyScope) => {
+    if (scope === 'current') {
+      setParamsState((prev) => ({
+        ...prev,
+        kerningPairs: { ...prev.kerningPairs, [pair]: delta },
+      }));
+      return;
+    }
+    setParamsState((prev) => ({
+      ...prev,
+      kerningPairs: { ...prev.kerningPairs, [pair]: delta },
+    }));
+    setPresetsState((library) => {
+      const next: Record<string, StyleParams> = {};
+      for (const [name, style] of Object.entries(library)) {
+        next[name] = {
+          ...style,
+          kerningPairs: { ...style.kerningPairs, [pair]: delta },
+        };
+      }
+      return next;
+    });
+  }, []);
+
+  const removeKerningPair = useCallback((pair: string, scope: ApplyScope) => {
+    if (scope === 'current') {
+      setParamsState((prev) => {
+        const kerningPairs = { ...prev.kerningPairs };
+        delete kerningPairs[pair];
+        return { ...prev, kerningPairs };
+      });
+      return;
+    }
+    setParamsState((prev) => {
+      const kerningPairs = { ...prev.kerningPairs };
+      delete kerningPairs[pair];
+      return { ...prev, kerningPairs };
+    });
+    setPresetsState((library) => {
+      const next: Record<string, StyleParams> = {};
+      for (const [name, style] of Object.entries(library)) {
+        const kerningPairs = { ...style.kerningPairs };
+        delete kerningPairs[pair];
+        next[name] = { ...style, kerningPairs };
+      }
+      return next;
+    });
   }, []);
 
   const resetToRegular = useCallback(() => {
-    setParamsState({ ...REGULAR_PARAMS });
-    setPresetsState((library) => ({ ...library, Regular: { ...REGULAR_PARAMS } }));
+    setParamsState(cloneStyleParams(REGULAR_PARAMS));
+    setPresetsState((library) => ({
+      ...library,
+      Regular: cloneStyleParams(REGULAR_PARAMS),
+    }));
     setActivePreset(DEFAULT_PRESET_NAME);
   }, []);
 
@@ -559,6 +864,7 @@ export function useStudio(): Studio {
     inspectChar,
     setInspectChar,
     customGlyphs,
+    glyphsByStyle,
     setCustomGlyph,
     mergeCustomGlyphs,
     removeCustomGlyph,
@@ -567,9 +873,12 @@ export function useStudio(): Studio {
     selectCustomGlyphVariant,
     removeCustomGlyphVariant,
     ligatures,
+    ligaturesByStyle,
     setLigature,
     removeLigature,
     replaceLigatures,
+    applyKerningPair,
+    removeKerningPair,
     context,
     fontLoading,
     fontError,

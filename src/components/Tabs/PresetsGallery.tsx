@@ -12,6 +12,7 @@ import { renderTextSvg } from '../../engine/geometry';
 import { generateStyleName, sortPresetNames } from '../../engine/nameGenerator';
 import { usePresetContext } from '../../hooks/usePresetContext';
 import type { CustomGlyphLibrary, LigatureLibrary, PresetLibrary, StyleParams } from '../../types/fontTypes';
+import type { StyleScopedGlyphs, StyleScopedLigatures } from '../../engine/styleAssets';
 
 /** Specimen modules stay white on black for every card state. */
 const CARD_SPECIMEN_COLORS = { fill: '#FFFFFF', stroke: '#FFFFFF', background: '#000000' };
@@ -20,11 +21,16 @@ interface PresetsGalleryProps {
   presets: PresetLibrary;
   activePreset: string;
   onApply: (name: string) => void;
-  onCreate: (name: string, source?: StyleParams, activate?: boolean) => string | null;
+  onCreate: (
+    name: string,
+    source?: StyleParams,
+    activate?: boolean,
+    sourceStyleName?: string,
+  ) => string | null;
   onRename: (from: string, to: string) => string | null;
   onDelete: (name: string) => void;
-  customGlyphs: CustomGlyphLibrary;
-  ligatures: LigatureLibrary;
+  glyphsByStyle: StyleScopedGlyphs;
+  ligaturesByStyle: StyleScopedLigatures;
 }
 
 export function PresetsGallery({
@@ -34,8 +40,8 @@ export function PresetsGallery({
   onCreate,
   onRename,
   onDelete,
-  customGlyphs,
-  ligatures,
+  glyphsByStyle,
+  ligaturesByStyle,
 }: PresetsGalleryProps) {
   const [message, setMessage] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
@@ -43,6 +49,8 @@ export function PresetsGallery({
 
   const names = useMemo(() => sortPresetNames(Object.keys(presets), presets), [presets]);
   const activeParams = presets[activePreset];
+  const customGlyphs = glyphsByStyle[activePreset] ?? {};
+  const ligatures = ligaturesByStyle[activePreset] ?? {};
 
   const exportContext = usePresetContext(activeParams, customGlyphs, ligatures);
 
@@ -53,7 +61,7 @@ export function PresetsGallery({
         return;
       }
       const name = generateStyleName(source, names, presets);
-      const error = onCreate(name, source, false);
+      const error = onCreate(name, source, false, sourceName);
       if (error) {
         setMessage(error);
         return;
@@ -106,8 +114,8 @@ export function PresetsGallery({
       const blob = await buildFamilyPack(presets, {
         family: FONT_FAMILY,
         specimen: DEFAULT_PHRASE,
-        customGlyphs,
-        ligatures,
+        glyphsByStyle,
+        ligaturesByStyle,
         onProgress: (done, total, styleName) => {
           setMessage(`Начертание ${done} из ${total}: ${styleName}`);
         },
@@ -121,7 +129,7 @@ export function PresetsGallery({
     } finally {
       setBusy(false);
     }
-  }, [customGlyphs, ligatures, presets]);
+  }, [glyphsByStyle, ligaturesByStyle, presets]);
 
   const confirmDelete = useCallback(() => {
     if (pendingDelete) {
@@ -148,8 +156,8 @@ export function PresetsGallery({
               onRename={onRename}
               occupiedNames={names}
               allPresets={presets}
-              customGlyphs={customGlyphs}
-              ligatures={ligatures}
+              customGlyphs={glyphsByStyle[name] ?? {}}
+              ligatures={ligaturesByStyle[name] ?? {}}
               onRequestDelete={setPendingDelete}
             />
           ))}

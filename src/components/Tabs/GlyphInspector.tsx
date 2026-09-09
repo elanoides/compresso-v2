@@ -88,7 +88,7 @@ interface GlyphInspectorProps {
   onAddVariant: (ch: string) => void;
   onSelectVariant: (ch: string, index: number) => void;
   onRemoveVariant: (ch: string, index: number) => void;
-  onSetLigature: (trigger: string, entry: Ligature) => void;
+  onSetLigature: (trigger: string, entry: Ligature, onDone?: () => void) => void;
   onRemoveLigature: (trigger: string) => void;
   onResetAllGlyphs: () => void;
 }
@@ -194,8 +194,7 @@ export function GlyphInspector({
     if (!editingLigature || !ligDraft) {
       return;
     }
-    onSetLigature(char, ligatureFromGlyph(char, ligDraft));
-    setLigDraftDirty(false);
+    onSetLigature(char, ligatureFromGlyph(char, ligDraft), () => setLigDraftDirty(false));
   }, [char, editingLigature, ligDraft, onSetLigature]);
 
   const commitGlyph = useCallback(
@@ -472,11 +471,16 @@ export function GlyphInspector({
           />
           <div className="mt-1">
             <Checkbox
-              label="Применить ко всем буквам (H, A, E, F...)"
+              label="Применить ко всем буквам (H, A, E, F…)"
               checked={applyAllBars}
               onChange={setApplyAll}
             />
           </div>
+          <p className="mt-1 text-[10px] leading-snug text-studio-faint">
+            «Ко всем буквам» — только буквы с перемычкой (H, A, E…). Правки
+            глифов всегда пишутся лишь в начертание «{activePreset}», не во весь
+            шрифт.
+          </p>
         </fieldset>
 
         <div className="flex flex-col gap-1">

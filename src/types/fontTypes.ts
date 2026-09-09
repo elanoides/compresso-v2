@@ -143,8 +143,14 @@ export interface PresetFilePayload {
   format: string;
   active: string | null;
   presets: Record<string, Partial<StyleParams>>;
+  /** @deprecated Prefer glyphsByStyle — kept for older JSON files. */
   customGlyphs?: Record<string, CustomGlyphBank>;
+  /** @deprecated Prefer ligaturesByStyle — kept for older JSON files. */
   ligatures?: Record<string, Ligature>;
+  /** Per-style glyph overrides keyed by начертание name. */
+  glyphsByStyle?: Record<string, Record<string, CustomGlyphBank>>;
+  /** Per-style ligatures keyed by начертание name. */
+  ligaturesByStyle?: Record<string, Record<string, Ligature>>;
 }
 
 /** Snapshot baked into an exported OTF/TTF name table for round-trip load. */
@@ -205,4 +211,4 @@ export interface TextLayout {
   maxRow: number;
 }
 
-export type TabId = 'word' | 'glyph' | 'styles';
+export type TabId = 'word' | 'glyph' | 'styles' | 'animation';

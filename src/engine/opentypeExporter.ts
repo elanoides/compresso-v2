@@ -87,6 +87,20 @@ export function fontUnitScale(p: StyleParams): number {
   return CAP_HEIGHT_FONT_UNITS / capSpan;
 }
 
+/**
+ * Advance in font units: glyph slot + tracking.
+ *
+ * Preview layout walks `width + letterSpacing` columns even when ovals spill
+ * past the last cell. Ink overflow (`xMax`) must not become a floor — that
+ * swallowed Letter spacing whenever rx was large relative to stepX.
+ */
+function advanceFromSlot(advanceCols: number, p: StyleParams, scale: number): number {
+  return Math.max(
+    1,
+    Math.round((advanceCols + effectiveLetterSpacing(p)) * p.stepX * scale),
+  );
+}
+
 function advanceWidthFor(
   ch: string,
   p: StyleParams,
@@ -95,7 +109,7 @@ function advanceWidthFor(
   versionIndex?: number,
 ): number {
   const cols = glyphWidth(ch, custom, versionIndex) * Math.max(1, p.colScale);
-  return Math.max(1, Math.round((cols + effectiveLetterSpacing(p)) * p.stepX * scale));
+  return advanceFromSlot(cols, p, scale);
 }
 
 interface BuiltGlyph {
@@ -127,7 +141,7 @@ function buildLigatureOutline(trigger: string, ctx: RenderContext, scale: number
       : new Map<number, string[]>();
 
   const segments: PathSegment[] = [];
-  const [halfWidth, halfHeight] = ellipseHalfExtents(
+  const [, halfHeight] = ellipseHalfExtents(
     p.rx * scale,
     p.ry * scale,
     p.moduleAngle,
@@ -135,7 +149,6 @@ function buildLigatureOutline(trigger: string, ctx: RenderContext, scale: number
 
   let yMin = 0;
   let yMax = 0;
-  let xMax = 0;
 
   for (const [col, row] of coords) {
     const [cx, cy] = moduleCenterFontUnits(col, row, p, scale, trigger);
@@ -144,7 +157,6 @@ function buildLigatureOutline(trigger: string, ctx: RenderContext, scale: number
     );
     yMin = Math.min(yMin, cy - halfHeight);
     yMax = Math.max(yMax, cy + halfHeight);
-    xMax = Math.max(xMax, cx + halfWidth);
   }
 
   for (const bar of bars) {
@@ -160,21 +172,16 @@ function buildLigatureOutline(trigger: string, ctx: RenderContext, scale: number
       ),
     );
     const stretch = serifBarGeometry(p, bar.serif);
-    const [barHalfWidth, barHalfHeight] = ellipseHalfExtents(
+    const [, barHalfHeight] = ellipseHalfExtents(
       stretch.rx * scale,
       p.ry * scale,
       p.moduleAngle,
     );
     yMin = Math.min(yMin, cy - barHalfHeight);
     yMax = Math.max(yMax, cy + barHalfHeight);
-    xMax = Math.max(xMax, cx + stretch.dx * scale + barHalfWidth);
   }
 
-  const advanceWidth = Math.max(
-    1,
-    Math.round((advanceCols + effectiveLetterSpacing(p)) * p.stepX * scale),
-    Math.ceil(xMax),
-  );
+  const advanceWidth = advanceFromSlot(advanceCols, p, scale);
 
   return {
     char: trigger,
@@ -211,7 +218,7 @@ function buildGlyphOutline(
       : new Map<number, string[]>();
 
   const segments: PathSegment[] = [];
-  const [halfWidth, halfHeight] = ellipseHalfExtents(
+  const [, halfHeight] = ellipseHalfExtents(
     p.rx * scale,
     p.ry * scale,
     p.moduleAngle,
@@ -219,7 +226,6 @@ function buildGlyphOutline(
 
   let yMin = 0;
   let yMax = 0;
-  let xMax = 0;
 
   for (const [col, row] of coords) {
     const [cx, cy] = moduleCenterFontUnits(col, row, p, scale, ch);
@@ -228,7 +234,6 @@ function buildGlyphOutline(
     );
     yMin = Math.min(yMin, cy - halfHeight);
     yMax = Math.max(yMax, cy + halfHeight);
-    xMax = Math.max(xMax, cx + halfWidth);
   }
 
   for (const bar of bars) {
@@ -244,21 +249,16 @@ function buildGlyphOutline(
       ),
     );
     const stretch = serifBarGeometry(p, bar.serif);
-    const [barHalfWidth, barHalfHeight] = ellipseHalfExtents(
+    const [, barHalfHeight] = ellipseHalfExtents(
       stretch.rx * scale,
       p.ry * scale,
       p.moduleAngle,
     );
     yMin = Math.min(yMin, cy - barHalfHeight);
     yMax = Math.max(yMax, cy + barHalfHeight);
-    xMax = Math.max(xMax, cx + stretch.dx * scale + barHalfWidth);
   }
 
-  const advanceWidth = Math.max(
-    1,
-    Math.round((advanceCols + effectiveLetterSpacing(p)) * p.stepX * scale),
-    Math.ceil(xMax),
-  );
+  const advanceWidth = advanceFromSlot(advanceCols, p, scale);
 
   return {
     char: ch,

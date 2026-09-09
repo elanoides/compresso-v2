@@ -50,7 +50,10 @@ export const MAX_GLYPH_VARIANTS = 3;
 const EMPTY_CUSTOM: CustomGlyphLibrary = {};
 
 function cloneGlyph(glyph: CustomGlyph): CustomGlyph {
-  return { width: glyph.width, coords: glyph.coords };
+  return {
+    width: glyph.width,
+    coords: glyph.coords.map(([col, row]) => [col, row] as const),
+  };
 }
 
 function overlayOf(
@@ -337,11 +340,12 @@ export function snapshotGlyph(
 ): CustomGlyph {
   const overlay = overlayOf(ch, custom, versionIndex);
   if (overlay) {
-    return { width: overlay.width, coords: overlay.coords };
+    return cloneGlyph(overlay);
   }
+  const factory = GLYPHS[ch] ?? EMPTY;
   return {
     width: glyphWidth(ch, EMPTY_CUSTOM),
-    coords: GLYPHS[ch] ?? EMPTY,
+    coords: factory.map(([col, row]) => [col, row] as const),
   };
 }
 

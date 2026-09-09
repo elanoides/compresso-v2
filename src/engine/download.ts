@@ -22,6 +22,10 @@ export function downloadFont(binary: ArrayBuffer, filename: string): void {
   downloadBinary(binary, filename, 'font/otf');
 }
 
+export function downloadBlob(blob: Blob, filename: string): void {
+  saveAs(blob, filename);
+}
+
 /** Read a user-selected file as UTF-8 text. */
 export function readTextFile(file: File): Promise<string> {
   return new Promise((resolve, reject) => {

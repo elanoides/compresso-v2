@@ -56,6 +56,8 @@ export type ParsedStudioFile =
       active: string | null;
       customGlyphs: CustomGlyphLibrary;
       ligatures: LigatureLibrary;
+      glyphsByStyle: Record<string, CustomGlyphLibrary>;
+      ligaturesByStyle: Record<string, LigatureLibrary>;
     }
   | { kind: 'foreign' };
 
@@ -189,6 +191,8 @@ export async function parseStudioFile(file: File): Promise<ParsedStudioFile> {
       active: parsed.active,
       customGlyphs: parsed.customGlyphs,
       ligatures: parsed.ligatures,
+      glyphsByStyle: parsed.glyphsByStyle,
+      ligaturesByStyle: parsed.ligaturesByStyle,
     };
   }
   if (isFontFile(file)) {

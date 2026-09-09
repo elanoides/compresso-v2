@@ -17,7 +17,7 @@ import {
 } from '../types/fontTypes';
 import { normalizeLigatureLibrary } from '../engine/ligatures';
 
-export const PRESET_FILE_FORMAT = 'crt-font-studio-presets-v3';
+export const PRESET_FILE_FORMAT = 'crt-font-studio-presets-v4';
 
 /** The reference style — every other preset is a delta on top of this. */
 export const REGULAR_PARAMS: StyleParams = {
@@ -206,13 +206,18 @@ export function presetsToJson(
   activeName: string | null,
   customGlyphs: CustomGlyphLibrary = {},
   ligatures: LigatureLibrary = {},
+  glyphsByStyle: Record<string, CustomGlyphLibrary> = {},
+  ligaturesByStyle: Record<string, LigatureLibrary> = {},
 ): string {
   const payload: PresetFilePayload = {
     format: PRESET_FILE_FORMAT,
     active: activeName,
     presets: presets as Record<string, StyleParams>,
+    // Active-style snapshot for older readers.
     customGlyphs: { ...customGlyphs },
     ligatures: { ...ligatures },
+    glyphsByStyle,
+    ligaturesByStyle,
   };
   return JSON.stringify(payload, null, 2);
 }
@@ -222,6 +227,8 @@ export interface ParsedPresetFile {
   active: string | null;
   customGlyphs: CustomGlyphLibrary;
   ligatures: LigatureLibrary;
+  glyphsByStyle: Record<string, CustomGlyphLibrary>;
+  ligaturesByStyle: Record<string, LigatureLibrary>;
 }
 
 export function normalizeCustomGlyphs(raw: unknown): CustomGlyphLibrary {
@@ -348,7 +355,14 @@ export function presetsFromJson(text: string): ParsedPresetFile {
 
   const presets: Record<string, StyleParams> = {};
   for (const [name, params] of Object.entries(rawPresets)) {
-    if (name === 'customGlyphs' || name === 'ligatures' || name === 'format' || name === 'active') {
+    if (
+      name === 'customGlyphs' ||
+      name === 'ligatures' ||
+      name === 'glyphsByStyle' ||
+      name === 'ligaturesByStyle' ||
+      name === 'format' ||
+      name === 'active'
+    ) {
       continue;
     }
     const label = String(name).trim();
@@ -361,11 +375,82 @@ export function presetsFromJson(text: string): ParsedPresetFile {
     throw new Error('В файле нет ни одного начертания');
   }
 
+  const styleNames = Object.keys(presets);
   const active = typeof container.active === 'string' ? container.active : null;
+  const legacyGlyphs = normalizeCustomGlyphs(container.customGlyphs);
+  const legacyLigatures = normalizeLigatureLibrary(container.ligatures);
+  const glyphsByStyle = normalizeStyleGlyphMap(container.glyphsByStyle, styleNames, legacyGlyphs);
+  const ligaturesByStyle = normalizeStyleLigatureMap(
+    container.ligaturesByStyle,
+    styleNames,
+    legacyLigatures,
+  );
+  const activeName = active && presets[active] ? active : styleNames[0]!;
+
   return {
     presets,
     active: active && presets[active] ? active : null,
-    customGlyphs: normalizeCustomGlyphs(container.customGlyphs),
-    ligatures: normalizeLigatureLibrary(container.ligatures),
+    customGlyphs: glyphsByStyle[activeName] ?? legacyGlyphs,
+    ligatures: ligaturesByStyle[activeName] ?? legacyLigatures,
+    glyphsByStyle,
+    ligaturesByStyle,
   };
+}
+
+function normalizeStyleGlyphMap(
+  raw: unknown,
+  styleNames: readonly string[],
+  legacy: CustomGlyphLibrary,
+): Record<string, CustomGlyphLibrary> {
+  if (raw && typeof raw === 'object') {
+    const out: Record<string, CustomGlyphLibrary> = {};
+    for (const [styleName, value] of Object.entries(raw as Record<string, unknown>)) {
+      out[styleName] = normalizeCustomGlyphs(value);
+    }
+    if (Object.keys(out).length > 0) {
+      for (const name of styleNames) {
+        if (!(name in out)) {
+          out[name] = {};
+        }
+      }
+      return out;
+    }
+  }
+  if (Object.keys(legacy).length === 0) {
+    return {};
+  }
+  const out: Record<string, CustomGlyphLibrary> = {};
+  for (const name of styleNames) {
+    out[name] = normalizeCustomGlyphs(legacy);
+  }
+  return out;
+}
+
+function normalizeStyleLigatureMap(
+  raw: unknown,
+  styleNames: readonly string[],
+  legacy: LigatureLibrary,
+): Record<string, LigatureLibrary> {
+  if (raw && typeof raw === 'object') {
+    const out: Record<string, LigatureLibrary> = {};
+    for (const [styleName, value] of Object.entries(raw as Record<string, unknown>)) {
+      out[styleName] = normalizeLigatureLibrary(value);
+    }
+    if (Object.keys(out).length > 0) {
+      for (const name of styleNames) {
+        if (!(name in out)) {
+          out[name] = {};
+        }
+      }
+      return out;
+    }
+  }
+  if (Object.keys(legacy).length === 0) {
+    return {};
+  }
+  const out: Record<string, LigatureLibrary> = {};
+  for (const name of styleNames) {
+    out[name] = normalizeLigatureLibrary(legacy);
+  }
+  return out;
 }

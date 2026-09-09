@@ -50,6 +50,43 @@ interface RenameOfferDialogProps {
   onKeep: () => void;
 }
 
+interface ScopeConfirmDialogProps {
+  title: string;
+  styleName: string;
+  description: string;
+  onCurrent: () => void;
+  onAll: () => void;
+  onCancel: () => void;
+}
+
+/** Ask whether a kerning/ligature edit applies to one style or every style. */
+export function ScopeConfirmDialog({
+  title,
+  styleName,
+  description,
+  onCurrent,
+  onAll,
+  onCancel,
+}: ScopeConfirmDialogProps) {
+  return (
+    <Modal
+      title={title}
+      onClose={onCancel}
+      actions={
+        <>
+          <Button onClick={onCancel}>Отмена</Button>
+          <Button onClick={onCurrent}>Только «{styleName}»</Button>
+          <Button variant="primary" onClick={onAll}>
+            Ко всем начертаниям
+          </Button>
+        </>
+      }
+    >
+      <p>{description}</p>
+    </Modal>
+  );
+}
+
 export function RenameOfferDialog({
   serialName,
   suggestedName,

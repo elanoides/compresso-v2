@@ -30,11 +30,11 @@ npm run dev
 публикует `dist/` на GitHub Pages. В настройках репозитория *Settings → Pages*
 источник должен быть выставлен в **GitHub Actions**.
 
-Сборка использует `base: '/compresso-parametric-studio-v3/'`. Сайт после публикации:
+Сборка использует `base: '/compresso-v2/'`. После публикации сайт будет по адресу
+репозитория (Pages). При переименовании репозитория обновите `REPO_BASE` в
+`vite.config.ts`.
 
-`https://elanoides.github.io/compresso-parametric-studio-v3/`
-
-При переименовании репозитория обновите `REPO_BASE` в `vite.config.ts`.
+Репозиторий: [elanoide-s89/compresso-v2](https://cursor.com/codebase/elanoide-s89/compresso-v2)
 
 ---
 
@@ -103,8 +103,12 @@ UTF-8-совместимый SHA-256, поэтому один и тот же `se
 | Формат | Как собирается |
 | --- | --- |
 | **SVG** | Строка разметки из `engine/geometry.ts` — та же, что рисует превью |
-| **OTF** | `engine/opentypeExporter.ts` запекает модули в контуры Безье через `opentype.js` |
+| **OTF** | `engine/opentypeExporter.ts` запекает модули в контуры Безье через `opentype.js`. AdvanceWidth = слоты глифа + `letterSpacing` (трекинг), без обрезания по bbox овалов |
 | **ZIP** | `engine/zipExporter.ts` — папка на каждое начертание: SVG глифов, спесимен, `params.json`, готовый шрифт |
+| **MP4 / WebM** | Вкладка «Анимация»: `engine/videoExporter.ts` пишет canvas через MediaRecorder (H.264, иначе VP9) |
+| **Embed** | `engine/webEmbedExporter.ts` — автономный HTML/JS для Tilda / Webflow / WordPress |
+
+Интерполяция начертаний — `engine/animationEngine.ts` (lerp + easing, дискретные флаги засечек на t = 0.5).
 
 Кернинг сохраняется в шрифт двумя таблицами: современной `GPOS` (фича `kern`) и
 легаси `kern` формата 0 — `opentype.js` их не пишет, поэтому

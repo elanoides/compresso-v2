@@ -1,11 +1,12 @@
 {
-  "name": "compresso-parametric-studio-v3",
+  "name": "compresso-v2",
   "private": true,
   "version": "3.0.0",
   "type": "module",
   "description": "Compresso Parametric Font Studio v3 — client-side modular font editor with OTF/ZIP export",
   "scripts": {
     "dev": "vite",
+    "dev:local": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"

@@ -11,6 +11,7 @@ import { downloadFont, downloadSvg } from '../../engine/download';
 import { FONT_FAMILY, styleSlug } from '../../engine/fontNaming';
 import { renderTextSvg } from '../../engine/geometry';
 import type { PresetLibrary, RenderContext } from '../../types/fontTypes';
+import type { StyleScopedGlyphs, StyleScopedLigatures } from '../../engine/styleAssets';
 
 interface WordTesterProps {
   context: RenderContext;
@@ -20,6 +21,8 @@ interface WordTesterProps {
   onTextChange: (text: string) => void;
   previewScale: number;
   onPreviewScaleChange: (scale: number) => void;
+  glyphsByStyle: StyleScopedGlyphs;
+  ligaturesByStyle: StyleScopedLigatures;
 }
 
 export function WordTester({
@@ -30,6 +33,8 @@ export function WordTester({
   onTextChange,
   previewScale,
   onPreviewScaleChange,
+  glyphsByStyle,
+  ligaturesByStyle,
 }: WordTesterProps) {
   const [status, setStatus] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -99,8 +104,8 @@ export function WordTester({
       const blob = await buildFamilyPack(presets, {
         family: FONT_FAMILY,
         specimen: DEFAULT_PHRASE,
-        customGlyphs: context.customGlyphs,
-        ligatures: context.ligatures,
+        glyphsByStyle,
+        ligaturesByStyle,
         onProgress: (done, total, styleName) => {
           setStatus(`Начертание ${done} из ${total}: ${styleName}`);
         },
@@ -114,7 +119,7 @@ export function WordTester({
     } finally {
       setBusy(false);
     }
-  }, [context.customGlyphs, context.ligatures, presets]);
+  }, [glyphsByStyle, ligaturesByStyle, presets]);
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">

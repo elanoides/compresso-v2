@@ -17,6 +17,8 @@ export interface FamilyPackOptions {
   specimen: string;
   customGlyphs?: CustomGlyphLibrary;
   ligatures?: LigatureLibrary;
+  glyphsByStyle?: Readonly<Record<string, CustomGlyphLibrary>>;
+  ligaturesByStyle?: Readonly<Record<string, LigatureLibrary>>;
   /** Called after each style so the UI can show progress. */
   onProgress?: (done: number, total: number, styleName: string) => void;
 }
@@ -32,12 +34,14 @@ export async function buildFamilyPack(
   const zip = new JSZip();
   const entries = Object.entries(presets);
   const total = entries.length;
-  const customGlyphs = options.customGlyphs ?? {};
-  const ligatures = options.ligatures ?? {};
+  const sharedGlyphs = options.customGlyphs ?? {};
+  const sharedLigatures = options.ligatures ?? {};
   const usedNames = new Set<string>();
 
   let done = 0;
   for (const [styleName, params] of entries) {
+    const customGlyphs = options.glyphsByStyle?.[styleName] ?? sharedGlyphs;
+    const ligatures = options.ligaturesByStyle?.[styleName] ?? sharedLigatures;
     const ctx = await buildStyleContext(params, customGlyphs, ligatures);
     const fileName = uniquePackFileName(options.family, styleName, usedNames);
     usedNames.add(fileName);
