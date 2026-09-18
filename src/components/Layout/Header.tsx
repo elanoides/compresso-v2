@@ -1,20 +1,5 @@
-import { useMemo } from 'react';
-
-import { SvgCanvas } from '../SvgCanvas';
 import { Tabs } from './Tabs';
-import { REGULAR_PARAMS } from '../../data/presets';
-import { renderTextSvg } from '../../engine/geometry';
-import type { RenderContext, TabId } from '../../types/fontTypes';
-
-const TITLE = 'COMPRESSO PARAMETRIC FONT STUDIO';
-
-const TITLE_CONTEXT: RenderContext = {
-  params: REGULAR_PARAMS,
-  fontPaths: {},
-  fontAlphabet: '',
-  customGlyphs: {},
-  ligatures: {},
-};
+import type { TabId } from '../../types/fontTypes';
 
 interface HeaderProps {
   activeTab: TabId;
@@ -29,31 +14,21 @@ export function Header({
   activePreset,
   presetCount,
 }: HeaderProps) {
-  const titleSvg = useMemo(
-    () =>
-      renderTextSvg(TITLE, TITLE_CONTEXT, 1, {
-        paintBackground: false,
-        contain: true,
-      }),
-    [],
-  );
-
   return (
-    <header className="flex shrink-0 flex-col gap-2 border-b border-studio-border bg-studio-bg px-4 pt-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="min-w-0 flex-1">
-          <span className="sr-only">Compresso Parametric Font Studio</span>
-          <div className="h-16 max-w-[1100px]">
-            <SvgCanvas svg={titleSvg} fluid />
-          </div>
+    <header className="flex shrink-0 items-center gap-6 border-b border-studio-border/80 bg-studio-bg/80 px-5 py-3 backdrop-blur-sm">
+      <div className="min-w-0 shrink-0">
+        <h1 className="text-[15px] font-semibold tracking-[0.08em] text-studio-text uppercase">
+          Compresso
         </h1>
-        <p className="shrink-0 font-mono text-[11px] text-studio-faint">
-          Активное начертание: <span className="text-studio-muted">{activePreset}</span>
-          {' · '}
-          {presetCount} в библиотеке
+        <p className="mt-0.5 truncate font-mono text-[10px] tracking-wide text-studio-faint">
+          {activePreset}
+          <span className="text-studio-border-strong"> · </span>
+          {presetCount} начертаний
         </p>
       </div>
-      <Tabs active={activeTab} onChange={onTabChange} />
+      <div className="min-w-0 flex-1">
+        <Tabs active={activeTab} onChange={onTabChange} />
+      </div>
     </header>
   );
 }

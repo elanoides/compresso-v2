@@ -72,27 +72,25 @@ export function Sidebar({
   onRemoveKerningPair,
 }: SidebarProps) {
   return (
-    <aside className="custom-scrollbar flex h-full w-[320px] shrink-0 flex-col overflow-y-auto border-r border-neutral-800 bg-[#0d0d0d] p-4">
-      <div className="sticky top-0 z-10 shrink-0 bg-[#0d0d0d] pb-2">
+    <aside className="custom-scrollbar flex h-full w-[300px] shrink-0 flex-col overflow-y-auto border-r border-studio-border/80 bg-studio-panel/90 px-4 py-3">
+      <div className="sticky top-0 z-10 shrink-0 space-y-3 bg-studio-panel/95 pb-3 backdrop-blur-sm">
         <StudioFileDrop
           busy={loadBusy}
           status={loadStatus}
           statusKind={loadStatusKind}
           onFile={onLoadStudioFile}
         />
-        <div className="mt-2">
-          <PresetDock
-            names={Object.keys(presets)}
-            activePreset={activePreset}
-            onApply={onApplyPreset}
-            onSave={onSavePreset}
-            onReset={onResetPreset}
-            onCreate={onCreatePreset}
-            onSaveAsNew={onSaveAsNew}
-          />
-        </div>
+        <PresetDock
+          names={Object.keys(presets)}
+          activePreset={activePreset}
+          onApply={onApplyPreset}
+          onSave={onSavePreset}
+          onReset={onResetPreset}
+          onCreate={onCreatePreset}
+          onSaveAsNew={onSaveAsNew}
+        />
       </div>
-      <div className="flex shrink-0 flex-col gap-2">
+      <div className="flex shrink-0 flex-col">
         <ModuleSection
           params={params}
           onChange={onChange}
@@ -140,8 +138,8 @@ function StudioFileDrop({
   return (
     <div
       className={
-        'rounded-lg border bg-studio-surface p-2.5 transition-colors ' +
-        (dragOver ? 'border-white' : 'border-studio-border')
+        'rounded-md border border-dashed px-2 py-2 transition-colors ' +
+        (dragOver ? 'border-studio-text bg-studio-surface' : 'border-studio-border/80')
       }
       onDragEnter={(event) => {
         event.preventDefault();
@@ -177,23 +175,21 @@ function StudioFileDrop({
       <Button
         compact
         fullWidth
+        variant="ghost"
         disabled={busy}
         onClick={() => inputRef.current?.click()}
-        title="Открыть .otf или .ttf, экспортированные из этой студии"
+        title="Открыть .otf или .ttf, экспортированные из этой студии. Можно перетащить файл сюда."
       >
-        <FolderOpen size={12} aria-hidden />
-        {busy ? 'Загрузка…' : 'Загрузить созданный шрифт (.otf, .ttf)'}
+        <FolderOpen size={13} aria-hidden />
+        {busy ? 'Загрузка…' : 'Открыть шрифт'}
       </Button>
-      <p className="mt-1.5 text-[10px] leading-snug text-studio-faint">
-        .otf, .ttf — файл или перетаскивание
-      </p>
       {status ? (
         <p
           className={
-            'mt-1.5 text-[10px] leading-snug ' +
+            'mt-1.5 px-0.5 text-[10px] leading-snug ' +
             (statusKind === 'error' || statusKind === 'warn'
-              ? 'text-[#ff5a52]'
-              : 'text-studio-text')
+              ? 'text-studio-danger'
+              : 'text-studio-muted')
           }
         >
           {status}
@@ -228,7 +224,7 @@ function PresetDock({
   onSaveAsNew: () => void;
 }) {
   return (
-    <div className="rounded-lg border border-studio-border bg-studio-surface p-2.5">
+    <div className="space-y-2 border-b border-studio-border/70 pb-3">
       <Combobox
         label="Начертание"
         value={activePreset}
@@ -237,28 +233,26 @@ function PresetDock({
         onCreate={onCreate}
         placeholder="Найти или ввести имя"
       />
-      <div className="mt-2 grid grid-cols-2 gap-1.5">
+      <div className="grid grid-cols-2 gap-1.5">
         <Button compact onClick={onSave} title="Перезаписать активное начертание текущими параметрами">
           <Save size={12} aria-hidden />
           Сохранить
         </Button>
-        <Button compact onClick={onReset} title="Вернуть параметры Regular">
+        <Button compact variant="ghost" onClick={onReset} title="Вернуть параметры Regular">
           <RotateCcw size={12} aria-hidden />
-          Сбросить к Regular
+          Regular
         </Button>
       </div>
-      <div className="mt-1.5">
-        <Button
-          compact
-          fullWidth
-          variant="primary"
-          onClick={onSaveAsNew}
-          title="Сохранить текущие слайдеры как новое начертание"
-        >
-          <Plus size={12} aria-hidden />
-          Сохранить как новое
-        </Button>
-      </div>
+      <Button
+        compact
+        fullWidth
+        variant="primary"
+        onClick={onSaveAsNew}
+        title="Сохранить текущие слайдеры как новое начертание"
+      >
+        <Plus size={12} aria-hidden />
+        Сохранить как новое
+      </Button>
     </div>
   );
 }
@@ -336,17 +330,13 @@ function ModuleSection({ params, onChange, fontLoading, fontError }: StyleSectio
             <Button
               key={angle}
               compact
-              variant={params.moduleAngle === angle ? 'primary' : 'default'}
+              variant={params.moduleAngle === angle ? 'primary' : 'ghost'}
               onClick={() => onChange({ moduleAngle: angle })}
             >
               {angle}°
             </Button>
           ))}
         </div>
-        <p className="mt-2 text-[10px] leading-snug text-studio-faint">
-          Вращение вокруг локального центра каждого модуля. Габариты холста
-          пересчитываются автоматически.
-        </p>
       </div>
     </Accordion>
   );
@@ -410,11 +400,7 @@ function CustomSvgUpload({
       <p className="mt-1.5 font-mono text-[10px] break-all text-studio-faint">
         {params.customSvgName || 'не загружен — рисуется овал'}
       </p>
-      {error ? <p className="mt-1 text-[10px] text-[#ff5a52]">{error}</p> : null}
-      <p className="mt-1 text-[10px] leading-snug text-studio-faint">
-        Габариты штампа задаются ползунками rx и ry выше — масштабирование
-        пропорциональное.
-      </p>
+      {error ? <p className="mt-1 text-[10px] text-studio-danger">{error}</p> : null}
     </div>
   );
 }
@@ -434,7 +420,7 @@ function FontModuleControls({ params, onChange, fontLoading, fontError }: StyleS
   );
 
   return (
-    <div className="flex flex-col gap-3 border-t border-studio-border pt-3">
+    <div className="flex flex-col gap-2.5 border-t border-studio-border/70 pt-3">
       <Select
         label="Семейство"
         value={params.moduleFontSubfamily}
@@ -453,9 +439,6 @@ function FontModuleControls({ params, onChange, fontLoading, fontError }: StyleS
         placeholder="например 01 или *#@!"
         onChange={(moduleFontChars) => onChange({ moduleFontChars })}
       />
-      <p className="-mt-1.5 text-[10px] leading-snug text-studio-faint">
-        Пустое поле — весь читаемый алфавит шрифта без служебных глифов.
-      </p>
       <RadioGroup<FillOrder>
         label="Порядок заполнения"
         value={params.moduleFontFillOrder}
@@ -486,7 +469,7 @@ function FontModuleControls({ params, onChange, fontLoading, fontError }: StyleS
       {fontLoading ? (
         <p className="text-[10px] text-studio-muted">Загрузка контуров шрифта…</p>
       ) : null}
-      {fontError ? <p className="text-[10px] text-[#ff5a52]">{fontError}</p> : null}
+      {fontError ? <p className="text-[10px] text-studio-danger">{fontError}</p> : null}
     </div>
   );
 }
@@ -518,9 +501,6 @@ function SpacingSection({
         step={0.5}
         onChange={(stepY) => onChange({ stepY })}
       />
-      <p className="-mt-1 text-[10px] leading-snug text-studio-faint">
-        Шаг меньше диаметра модуля даёт плотный нахлёст — это допустимо.
-      </p>
       <Slider
         label="Matrix columns ×"
         value={params.colScale}
@@ -545,10 +525,6 @@ function SpacingSection({
         step={0.5}
         onChange={(letterSpacing) => onChange({ letterSpacing })}
       />
-      <p className="-mt-1 text-[10px] leading-snug text-studio-faint">
-        Трекинг входит в advanceWidth экспортируемого OTF — сохраните начертание
-        перед выгрузкой семейства.
-      </p>
     </Accordion>
   );
 }
@@ -571,9 +547,6 @@ function DeformSection({
         suffix="°"
         onChange={(slantAngle) => onChange({ slantAngle })}
       />
-      <p className="-mt-1 text-[10px] leading-snug text-studio-faint">
-        Наклон считается от Baseline: x += (y_baseline − y) · tan θ.
-      </p>
       <Slider
         label="Glitch / Jitter X"
         value={params.jitterX}
@@ -695,7 +668,7 @@ function KerningSection({
           {entries.map(([key, value]) => (
             <li
               key={key}
-              className="flex items-center justify-between gap-2 rounded border border-studio-border bg-studio-panel px-2 py-1"
+              className="flex items-center justify-between gap-2 px-0.5 py-1"
             >
               <span className="font-mono text-[12px] text-studio-text">{key}</span>
               <span className="font-mono text-[11px] tabular-nums text-studio-muted">
@@ -705,7 +678,7 @@ function KerningSection({
               <button
                 type="button"
                 onClick={() => onRemovePair(key)}
-                className="text-[10px] text-studio-faint transition-colors hover:text-[#ff5a52]"
+                className="text-[10px] text-studio-faint transition-colors hover:text-studio-danger"
                 title={`Удалить пару ${key}`}
               >
                 убрать
@@ -714,10 +687,6 @@ function KerningSection({
           ))}
         </ul>
       )}
-      <p className="text-[10px] leading-snug text-studio-faint">
-        При сохранении пары спросим: только текущее начертание или все. Пары
-        запекаются в шрифт как GPOS и таблица kern.
-      </p>
     </Accordion>
   );
 }

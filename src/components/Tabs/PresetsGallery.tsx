@@ -164,7 +164,7 @@ export function PresetsGallery({
         </div>
       </div>
 
-      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 rounded-lg border border-neutral-800 bg-black/80 px-3 py-2 backdrop-blur-sm">
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 px-1 py-1">
         <Button compact onClick={exportSvg} disabled={busy || !exportContext}>
           <Download size={13} aria-hidden />
           Экспорт SVG
@@ -316,10 +316,10 @@ const PresetCard = memo(function PresetCard({
   return (
     <article
       className={
-        'flex cursor-pointer flex-col gap-2.5 rounded-lg border bg-black p-3 text-left transition-colors ' +
+        'flex cursor-pointer flex-col gap-2.5 rounded-md border bg-studio-panel p-3 text-left transition-colors ' +
         (active
-          ? 'border-2 border-white'
-          : 'border-neutral-800 hover:border-neutral-600')
+          ? 'border-studio-text/50'
+          : 'border-studio-border/70 hover:border-studio-border-strong')
       }
       onClick={apply}
     >

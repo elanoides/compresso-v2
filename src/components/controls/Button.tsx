@@ -15,12 +15,12 @@ interface ButtonProps {
 
 const VARIANT_CLASS: Record<ButtonVariant, string> = {
   default:
-    'border-studio-border bg-studio-surface text-studio-text hover:border-white disabled:hover:border-studio-border',
-  primary: 'border-white bg-studio-raised text-white font-semibold hover:bg-[#2a2a2a]',
-  inverted: 'border-black bg-black text-white font-semibold hover:bg-[#1a1a1a]',
-  danger: 'border-[#ff5a52] bg-[#ff5a52] text-black font-semibold hover:bg-[#ff746d]',
+    'border-studio-border/80 bg-transparent text-studio-text hover:border-studio-border-strong hover:bg-studio-surface disabled:hover:border-studio-border/80',
+  primary: 'border-studio-text/30 bg-studio-raised text-studio-text font-medium hover:bg-studio-border',
+  inverted: 'border-black bg-black text-white font-medium hover:bg-[#1a1a1a]',
+  danger: 'border-studio-danger bg-studio-danger text-black font-medium hover:opacity-90',
   ghost:
-    'border-transparent bg-transparent text-studio-muted hover:border-studio-border hover:text-studio-text',
+    'border-transparent bg-transparent text-studio-muted hover:bg-studio-surface hover:text-studio-text',
 };
 
 export function Button({

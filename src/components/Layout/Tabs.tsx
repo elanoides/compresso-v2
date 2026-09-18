@@ -1,8 +1,8 @@
 import type { TabId } from '../../types/fontTypes';
 
 export const TAB_LABELS: ReadonlyArray<{ id: TabId; label: string }> = [
-  { id: 'word', label: 'Наборщик текста' },
-  { id: 'glyph', label: 'Инспектор глифа' },
+  { id: 'word', label: 'Наборщик' },
+  { id: 'glyph', label: 'Глиф' },
   { id: 'styles', label: 'Начертания' },
   { id: 'animation', label: 'Анимация' },
 ];
@@ -14,7 +14,7 @@ interface TabsProps {
 
 export function Tabs({ active, onChange }: TabsProps) {
   return (
-    <nav className="flex gap-1" role="tablist" aria-label="Разделы студии">
+    <nav className="flex flex-wrap gap-0.5" role="tablist" aria-label="Разделы студии">
       {TAB_LABELS.map((tab) => {
         const selected = tab.id === active;
         return (
@@ -25,10 +25,10 @@ export function Tabs({ active, onChange }: TabsProps) {
             aria-selected={selected}
             onClick={() => onChange(tab.id)}
             className={
-              'rounded-t border-b-2 px-3.5 py-2 text-[12px] transition-colors ' +
+              'rounded-md px-3 py-1.5 text-[12px] transition-colors ' +
               (selected
-                ? 'border-white font-semibold text-white'
-                : 'border-transparent text-studio-muted hover:text-studio-text')
+                ? 'bg-studio-raised font-medium text-studio-text'
+                : 'text-studio-muted hover:bg-studio-surface hover:text-studio-text')
             }
           >
             {tab.label}

@@ -194,7 +194,7 @@ export default function App() {
           onRemoveKerningPair={requestRemoveKerning}
         />
 
-        <main className="min-w-0 flex-1 overflow-hidden p-4">
+        <main className="min-w-0 flex-1 overflow-hidden p-5">
           {studio.tab === 'word' ? (
             <WordTester
               context={studio.context}

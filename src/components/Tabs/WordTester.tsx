@@ -122,24 +122,24 @@ export function WordTester({
   }, [glyphsByStyle, ligaturesByStyle, presets]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       <div className="flex shrink-0 flex-wrap items-end gap-4">
         <label className="min-w-[240px] flex-1">
           <span className="mb-1 block text-[11px] tracking-wide text-studio-muted">
-            Текст (All-Caps)
+            Текст
           </span>
           <input
             type="text"
             value={text}
             onChange={(event) => onTextChange(event.target.value.toUpperCase())}
             placeholder="НОБЕЛЬФАЙК"
-            className="w-full rounded border border-studio-border bg-studio-panel px-3 py-2 font-mono text-[15px] tracking-wide text-studio-text outline-none focus:border-studio-border-strong"
+            className="w-full rounded-md border border-studio-border/80 bg-studio-panel px-3 py-2 font-mono text-[15px] tracking-wide text-studio-text outline-none focus:border-studio-border-strong"
             aria-label="Текст для набора"
           />
         </label>
-        <div className="w-[220px]">
+        <div className="w-[200px]">
           <Slider
-            label="Размер шрифта"
+            label="Размер"
             value={Math.min(1, previewScale)}
             min={0.1}
             max={1}
@@ -149,7 +149,7 @@ export function WordTester({
         </div>
         <div className="pb-1">
           <Checkbox
-            label="Stylistic Set 01 (v2)"
+            label="SS01"
             checked={ss01 && hasSs01}
             disabled={!hasSs01}
             onChange={(checked) => setSs01(checked)}
@@ -158,7 +158,7 @@ export function WordTester({
       </div>
 
       <div
-        className="relative min-h-0 w-full flex-1 overflow-hidden rounded-lg border border-studio-border"
+        className="relative min-h-0 w-full flex-1 overflow-hidden rounded-md"
         style={{ backgroundColor: context.params.background }}
       >
         <div
@@ -175,17 +175,17 @@ export function WordTester({
       </div>
 
       <div className="flex shrink-0 flex-wrap items-center gap-2">
-        <Button onClick={exportSvg} disabled={busy}>
+        <Button compact onClick={exportSvg} disabled={busy} variant="ghost">
           <Download size={14} aria-hidden />
-          Экспорт SVG
+          SVG
         </Button>
-        <Button onClick={() => void exportFont()} disabled={busy} variant="primary">
+        <Button compact onClick={() => void exportFont()} disabled={busy} variant="primary">
           <Download size={14} aria-hidden />
-          Скачать шрифт (OTF/TTF)
+          Шрифт
         </Button>
-        <Button onClick={() => void exportFamily()} disabled={busy}>
+        <Button compact onClick={() => void exportFamily()} disabled={busy} variant="ghost">
           <Archive size={14} aria-hidden />
-          Экспорт семейства (ZIP)
+          ZIP семейства
         </Button>
         {status ? (
           <span className="font-mono text-[11px] text-studio-muted">{status}</span>

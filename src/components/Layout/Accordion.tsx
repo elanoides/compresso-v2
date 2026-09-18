@@ -11,27 +11,23 @@ export function Accordion({ title, children, defaultOpen = false }: AccordionPro
   const [open, setOpen] = useState(defaultOpen);
 
   return (
-    <section className="shrink-0 overflow-hidden rounded-lg border border-studio-border bg-studio-surface">
+    <section className="shrink-0 border-b border-studio-border/70 last:border-b-0">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors hover:bg-studio-raised"
+        className="flex w-full items-center justify-between gap-2 py-2.5 text-left transition-colors hover:text-studio-text"
       >
-        <span className="text-[12px] font-semibold tracking-wide text-studio-text uppercase">
+        <span className="text-[11px] font-medium tracking-[0.06em] text-studio-muted uppercase">
           {title}
         </span>
         <ChevronDown
           size={14}
-          className={`shrink-0 text-studio-muted transition-transform ${open ? 'rotate-180' : ''}`}
+          className={`shrink-0 text-studio-faint transition-transform ${open ? 'rotate-180' : ''}`}
           aria-hidden
         />
       </button>
-      {open ? (
-        <div className="flex flex-col gap-3 border-t border-studio-border px-3 py-3">
-          {children}
-        </div>
-      ) : null}
+      {open ? <div className="flex flex-col gap-2.5 pb-3">{children}</div> : null}
     </section>
   );
 }

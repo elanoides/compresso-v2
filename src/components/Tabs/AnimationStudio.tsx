@@ -480,27 +480,24 @@ export function AnimationStudio({
 
   const segmentLabel =
     sample && sample.segmentCount > 0
-      ? `Сегмент ${sample.segmentIndex + 1}/${sample.segmentCount}: ${sample.fromName} → ${sample.toName} · step ${morphParams.stepX.toFixed(1)}×${morphParams.stepY.toFixed(1)} · track ${morphParams.letterSpacing.toFixed(1)} · dens ${morphParams.colScale}×${morphParams.rowScale}`
+      ? `${sample.fromName} → ${sample.toName}`
       : null;
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3">
-      <div className="shrink-0 rounded-lg border border-studio-border bg-studio-surface p-3">
-        <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <p className="text-[11px] tracking-wide text-studio-muted">Ключевые кадры</p>
-            <p className="text-[11px] text-studio-faint">
-              Выберите начертание из списка или введите новое имя. Морф между соседними кадрами
-              считает сервис по easing.
-            </p>
-          </div>
+    <div className="flex h-full min-h-0 flex-col gap-4">
+      <div className="shrink-0 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-[11px] tracking-[0.06em] text-studio-muted uppercase">
+            Ключевые кадры
+          </p>
           <Button
             compact
+            variant="ghost"
             onClick={addKeyframe}
             title="Добавить ключевой кадр в конец цепочки"
           >
             <Plus size={14} aria-hidden />
-            Добавить кадр
+            Кадр
           </Button>
         </div>
         <ol className="flex flex-col gap-2">
@@ -510,13 +507,13 @@ export function AnimationStudio({
               className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-end gap-2"
             >
               <span className="pb-2 font-mono text-[11px] text-studio-faint">
-                KF{index + 1}
+                {index + 1}
               </span>
               <Combobox
                 label={index === 0 ? 'Начертание' : undefined}
                 value={frame.presetName}
                 options={names}
-                placeholder="Выбрать или создать начертание"
+                placeholder="Выбрать или создать"
                 onSelect={(name) => setKeyframePreset(frame.id, name)}
                 onCreate={(name) =>
                   createKeyframePreset(frame.id, name, frame.presetName || activePreset)
@@ -524,6 +521,7 @@ export function AnimationStudio({
               />
               <Button
                 compact
+                variant="ghost"
                 disabled={keyframes.length <= 2}
                 onClick={() => removeKeyframe(frame.id)}
                 title={
@@ -537,35 +535,33 @@ export function AnimationStudio({
             </li>
           ))}
         </ol>
-        <div className="mt-3">
-          <label className="block">
-            <span className="mb-1 block text-[11px] tracking-wide text-studio-muted">
-              Текст (All-Caps)
-            </span>
-            <input
-              type="text"
-              value={text}
-              onChange={(event) => onTextChange(event.target.value.toUpperCase())}
-              className="w-full rounded border border-studio-border bg-studio-panel px-3 py-2 font-mono text-[15px] tracking-wide text-studio-text outline-none focus:border-studio-border-strong"
-              aria-label="Текст для анимации"
-            />
-          </label>
-        </div>
+        <label className="block">
+          <span className="mb-1 block text-[11px] tracking-wide text-studio-muted">
+            Текст
+          </span>
+          <input
+            type="text"
+            value={text}
+            onChange={(event) => onTextChange(event.target.value.toUpperCase())}
+            className="w-full rounded-md border border-studio-border/80 bg-studio-panel px-3 py-2 font-mono text-[15px] tracking-wide text-studio-text outline-none focus:border-studio-border-strong"
+            aria-label="Текст для анимации"
+          />
+        </label>
       </div>
 
       <div
-        className="relative min-h-0 w-full flex-1 overflow-hidden rounded-lg border border-studio-border"
+        className="relative min-h-0 w-full flex-1 overflow-hidden rounded-md"
         style={{ backgroundColor: morphParams.background }}
       >
         <SvgCanvas svg={svg} fluid className="h-full w-full" />
         {segmentLabel ? (
-          <div className="pointer-events-none absolute right-2 bottom-2 rounded bg-black/55 px-2 py-1 font-mono text-[10px] text-white/85">
+          <div className="pointer-events-none absolute right-3 bottom-3 font-mono text-[10px] text-white/70">
             {segmentLabel}
           </div>
         ) : null}
       </div>
 
-      <div className="flex shrink-0 flex-col gap-3 rounded-lg border border-studio-border bg-studio-surface p-3">
+      <div className="flex shrink-0 flex-col gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <Button variant="primary" compact onClick={togglePlay} title="Пробел — Play / Pause">
             {playing ? <Pause size={14} aria-hidden /> : <Play size={14} aria-hidden />}
@@ -573,7 +569,7 @@ export function AnimationStudio({
           </Button>
           <div className="min-w-[200px] flex-1">
             <Slider
-              label="Кадр t"
+              label="Кадр"
               value={mix * 100}
               min={0}
               max={100}
@@ -585,7 +581,7 @@ export function AnimationStudio({
               }}
             />
           </div>
-          <div className="w-[180px]">
+          <div className="w-[160px]">
             <Slider
               label="Duration"
               value={durationSec}
@@ -598,7 +594,7 @@ export function AnimationStudio({
           </div>
         </div>
         <RadioGroup<EasingFunction>
-          label="Easing (между соседними кадрами / по всей цепочке)"
+          label="Easing"
           value={easing}
           columns={4}
           options={EASING_LABELS}
@@ -611,13 +607,14 @@ export function AnimationStudio({
             disabled={exportProgress !== null}
           >
             <Download size={14} aria-hidden />
-            {exportProgress !== null ? `Рендеринг: ${exportProgress}%` : 'Скачать MP4'}
+            {exportProgress !== null ? `${exportProgress}%` : 'MP4'}
           </Button>
-          <Button compact onClick={() => setEmbedOpen(true)}>
-            Встроить на сайт
+          <Button compact variant="ghost" onClick={() => setEmbedOpen(true)}>
+            Embed
           </Button>
           <Button
             compact
+            variant="ghost"
             onClick={() => {
               const name = nextOrdinalStyleName(names);
               const source = keyframes[keyframes.length - 1]?.presetName ?? activePreset;
@@ -630,12 +627,12 @@ export function AnimationStudio({
                 ...current,
                 { id: newTimelineKeyframeId(), presetName: name },
               ]);
-              setStatus(`Добавлен кадр «${name}»`);
+              setStatus(`Кадр «${name}»`);
             }}
             title="Создать новое начертание и добавить его как следующий ключевой кадр"
           >
             <Plus size={14} aria-hidden />
-            Новое начертание + кадр
+            Новое + кадр
           </Button>
           {status ? (
             <span className="font-mono text-[11px] text-studio-muted">{status}</span>

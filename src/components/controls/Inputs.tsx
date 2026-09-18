@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'rea
 import { ChevronDown } from 'lucide-react';
 
 const FIELD_CLASS =
-  'w-full rounded border border-studio-border bg-studio-panel px-2 py-1.5 text-[12px] ' +
+  'w-full rounded-md border border-studio-border/80 bg-studio-panel px-2 py-1.5 text-[12px] ' +
   'text-studio-text outline-none transition-colors focus:border-studio-border-strong';
 
 export function FieldLabel({ children }: { children: ReactNode }) {

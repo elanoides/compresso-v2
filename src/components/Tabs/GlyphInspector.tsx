@@ -702,7 +702,7 @@ function ToolHeader({
   deleteTitle?: string;
 }) {
   return (
-    <div className="inline-flex h-10 shrink-0 items-center gap-1.5 overflow-x-auto rounded-lg border border-studio-border bg-studio-surface px-2">
+    <div className="inline-flex h-9 shrink-0 items-center gap-1 overflow-x-auto border-b border-studio-border/70 px-1">
       <button
         type="button"
         title="Инвертировать заполнение всех ячеек"
